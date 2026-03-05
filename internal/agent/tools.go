@@ -15,8 +15,8 @@ import (
 
 const maxOutputBytes = 100_000 // truncate tool output beyond this
 
-// toolDefs returns the tool definitions for the agent.
-func toolDefs() []anthropic.ToolUnionParam {
+// ToolDefs returns the tool definitions for the agent.
+func ToolDefs() []anthropic.ToolUnionParam {
 	return []anthropic.ToolUnionParam{
 		{OfTool: &anthropic.ToolParam{
 			Name:        "read_file",
@@ -88,8 +88,8 @@ func jsonSchema(v any) anthropic.ToolInputSchemaParam {
 	return schema
 }
 
-// executeTool dispatches a tool call and returns the result string.
-func executeTool(name string, inputJSON json.RawMessage, repoRoot string) (string, bool) {
+// ExecuteTool dispatches a tool call and returns the result string.
+func ExecuteTool(name string, inputJSON json.RawMessage, repoRoot string) (string, bool) {
 	var input map[string]any
 	if err := json.Unmarshal(inputJSON, &input); err != nil {
 		return fmt.Sprintf("error parsing input: %s", err), true

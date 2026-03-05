@@ -85,6 +85,17 @@ func Load(testDir string) (Config, error) {
 	return cfg, nil
 }
 
+// LoadAPIKey loads the API key from the environment or .env file.
+// Unlike Load(), it does not require axiom.yml to exist.
+func LoadAPIKey() (string, error) {
+	loadDotEnv()
+	key := os.Getenv("ANTHROPIC_API_KEY")
+	if key == "" {
+		return "", fmt.Errorf("ANTHROPIC_API_KEY is not set (set it in the environment or a .env file)")
+	}
+	return key, nil
+}
+
 // loadDotEnv reads a .env file from the current directory and sets any
 // environment variables that are not already set. Silently ignores missing files.
 func loadDotEnv() {

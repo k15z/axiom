@@ -86,7 +86,7 @@ func Run(ctx context.Context, apiKey string, model string, condition string, onG
 	messages := []anthropic.MessageParam{
 		anthropic.NewUserMessage(anthropic.NewTextBlock(userMsg.String())),
 	}
-	tools := toolDefs()
+	tools := ToolDefs()
 
 	var usage Usage
 
@@ -119,7 +119,7 @@ func Run(ctx context.Context, apiKey string, model string, condition string, onG
 			case anthropic.ToolUseBlock:
 				summary := formatToolCall(v.Name, v.Input)
 				progress(Event{Kind: "tool_call", Message: summary})
-				result, isError := executeTool(v.Name, v.Input, repoRoot)
+				result, isError := ExecuteTool(v.Name, v.Input, repoRoot)
 				toolResults = append(toolResults, anthropic.NewToolResultBlock(v.ID, result, isError))
 			case anthropic.TextBlock:
 				finalText.WriteString(v.Text)
