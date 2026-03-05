@@ -14,6 +14,7 @@ type Entry struct {
 	LastRun    time.Time         `json:"last_run"`
 	FileHashes map[string]string `json:"file_hashes"`
 	Result     string            `json:"result"` // "pass" or "fail"
+	Reasoning  string            `json:"reasoning,omitempty"`
 }
 
 type Cache struct {
@@ -70,11 +71,12 @@ func (c *Cache) ShouldSkip(testName string, onGlobs []string, repoRoot string) (
 	return true, current
 }
 
-func (c *Cache) Update(testName string, result string, fileHashes map[string]string) {
+func (c *Cache) Update(testName string, result string, fileHashes map[string]string, reasoning string) {
 	c.entries[testName] = Entry{
 		LastRun:    time.Now(),
 		FileHashes: fileHashes,
 		Result:     result,
+		Reasoning:  reasoning,
 	}
 }
 

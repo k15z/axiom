@@ -167,7 +167,7 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 				if err == nil && result.Passed {
 					res = "pass"
 				}
-				c.Update(t.Name, res, cache.HashGlobs(t.On, repoRoot))
+				c.Update(t.Name, res, cache.HashGlobs(t.On, repoRoot), tr.Reasoning)
 			}
 			cacheMu.Unlock()
 
