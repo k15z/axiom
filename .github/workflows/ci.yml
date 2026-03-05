@@ -26,10 +26,7 @@ jobs:
       - name: Test
         run: go test ./...
 
-      - name: Install axiom
-        run: go install -buildvcs=false ./cmd/axiom/
-
       - name: Run axiom
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: axiom run --all
+        run: go run -buildvcs=false ./cmd/axiom/ run --all
