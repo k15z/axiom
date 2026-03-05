@@ -11,9 +11,16 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/option"
 )
 
+type Usage struct {
+	InputTokens  int
+	OutputTokens int
+	APICalls     int
+}
+
 type Result struct {
 	Passed    bool
 	Reasoning string
+	Usage     Usage
 }
 
 // Event is emitted by the agent during execution to report progress.
@@ -81,6 +88,8 @@ func Run(ctx context.Context, apiKey string, model string, condition string, onG
 	}
 	tools := toolDefs()
 
+	var usage Usage
+
 	maxIterations := opts.MaxIterations
 	for i := 0; i < maxIterations; i++ {
 		progress(Event{Kind: "thinking", Message: fmt.Sprintf("thinking (turn %d/%d)", i+1, maxIterations)})
@@ -95,8 +104,12 @@ func Run(ctx context.Context, apiKey string, model string, condition string, onG
 			})
 		})
 		if err != nil {
-			return Result{}, fmt.Errorf("API call failed: %w", err)
+			return Result{Usage: usage}, fmt.Errorf("API call failed: %w", err)
 		}
+
+		usage.APICalls++
+		usage.InputTokens += int(resp.Usage.InputTokens)
+		usage.OutputTokens += int(resp.Usage.OutputTokens)
 
 		var toolResults []anthropic.ContentBlockParamUnion
 		var finalText strings.Builder
@@ -119,12 +132,15 @@ func Run(ctx context.Context, apiKey string, model string, condition string, onG
 			continue
 		}
 
-		return parseVerdict(finalText.String()), nil
+		r := parseVerdict(finalText.String())
+		r.Usage = usage
+		return r, nil
 	}
 
 	return Result{
 		Passed:    false,
 		Reasoning: "Agent exceeded maximum iterations without reaching a verdict",
+		Usage:     usage,
 	}, nil
 }
 

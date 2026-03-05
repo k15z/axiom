@@ -17,7 +17,7 @@ var (
 	bold  = color.New(color.Bold)
 )
 
-func Print(results []types.TestResult, verbose bool) {
+func Print(results []types.TestResult, model string, verbose bool) {
 	fmt.Println()
 	bold.Println("  axiom")
 	fmt.Println()
@@ -65,6 +65,7 @@ func Print(results []types.TestResult, verbose bool) {
 
 	// Summary
 	passed, failed, cached, skipped := 0, 0, 0, 0
+	var totalUsage types.Usage
 	for _, r := range results {
 		switch {
 		case r.Cached:
@@ -76,6 +77,9 @@ func Print(results []types.TestResult, verbose bool) {
 		default:
 			failed++
 		}
+		totalUsage.InputTokens += r.Usage.InputTokens
+		totalUsage.OutputTokens += r.Usage.OutputTokens
+		totalUsage.APICalls += r.Usage.APICalls
 	}
 
 	fmt.Print("  ")
@@ -105,17 +109,34 @@ func Print(results []types.TestResult, verbose bool) {
 		gray.Printf("%d skipped", skipped)
 	}
 	fmt.Println()
+
+	// Token/cost summary
+	if totalUsage.APICalls > 0 {
+		cost := estimateCost(model, totalUsage.InputTokens, totalUsage.OutputTokens)
+		gray.Printf("  %d API calls · %s tokens · ~$%.4f\n",
+			totalUsage.APICalls,
+			formatTokens(totalUsage.InputTokens+totalUsage.OutputTokens),
+			cost,
+		)
+	}
 	fmt.Println()
 }
 
-func PrintJSON(results []types.TestResult) error {
+func PrintJSON(results []types.TestResult, model string) error {
+	type jsonUsage struct {
+		InputTokens  int     `json:"input_tokens"`
+		OutputTokens int     `json:"output_tokens"`
+		APICalls     int     `json:"api_calls"`
+		CostUSD      float64 `json:"cost_usd"`
+	}
 	type jsonResult struct {
-		Name      string  `json:"name"`
-		File      string  `json:"file"`
-		Passed    bool    `json:"passed"`
-		Cached    bool    `json:"cached"`
-		Reasoning string  `json:"reasoning,omitempty"`
-		Duration  float64 `json:"duration_seconds,omitempty"`
+		Name      string    `json:"name"`
+		File      string    `json:"file"`
+		Passed    bool      `json:"passed"`
+		Cached    bool      `json:"cached"`
+		Reasoning string    `json:"reasoning,omitempty"`
+		Duration  float64   `json:"duration_seconds,omitempty"`
+		Usage     jsonUsage `json:"usage,omitempty"`
 	}
 
 	var out []jsonResult
@@ -127,6 +148,12 @@ func PrintJSON(results []types.TestResult) error {
 			Cached:    r.Cached,
 			Reasoning: r.Reasoning,
 			Duration:  r.Duration.Seconds(),
+			Usage: jsonUsage{
+				InputTokens:  r.Usage.InputTokens,
+				OutputTokens: r.Usage.OutputTokens,
+				APICalls:     r.Usage.APICalls,
+				CostUSD:      estimateCost(model, r.Usage.InputTokens, r.Usage.OutputTokens),
+			},
 		})
 	}
 
@@ -151,6 +178,41 @@ func printReasoning(reasoning, indent string) {
 	for _, line := range lines {
 		gray.Printf("%s%s\n", indent, line)
 	}
+}
+
+// estimateCost returns estimated cost in USD based on model pricing.
+// Prices are per million tokens.
+func estimateCost(model string, inputTokens, outputTokens int) float64 {
+	type pricing struct{ input, output float64 }
+
+	// https://docs.anthropic.com/en/docs/about-claude/models
+	prices := map[string]pricing{
+		"claude-haiku-4-5":          {1.00, 5.00},
+		"claude-haiku-4-5-20251001": {1.00, 5.00},
+		"claude-sonnet-4-5":         {3.00, 15.00},
+		"claude-sonnet-4-5-20250514": {3.00, 15.00},
+		"claude-sonnet-4-6":         {3.00, 15.00},
+		"claude-opus-4-6":           {15.00, 75.00},
+	}
+
+	p, ok := prices[model]
+	if !ok {
+		// Default to haiku pricing as a conservative estimate
+		p = pricing{1.00, 5.00}
+	}
+
+	return (float64(inputTokens)*p.input + float64(outputTokens)*p.output) / 1_000_000
+}
+
+// formatTokens formats a token count with K/M suffixes for readability.
+func formatTokens(n int) string {
+	if n >= 1_000_000 {
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	}
+	if n >= 1_000 {
+		return fmt.Sprintf("%.1fK", float64(n)/1_000)
+	}
+	return fmt.Sprintf("%d", n)
 }
 
 func HasFailures(results []types.TestResult) bool {

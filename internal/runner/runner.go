@@ -131,6 +131,11 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 			duration := time.Since(start)
 
 			tr := types.TestResult{Test: t, Duration: duration}
+			tr.Usage = types.Usage{
+				InputTokens:  result.Usage.InputTokens,
+				OutputTokens: result.Usage.OutputTokens,
+				APICalls:     result.Usage.APICalls,
+			}
 			if err != nil {
 				tr.Passed = false
 				tr.Reasoning = "Agent error: " + err.Error()

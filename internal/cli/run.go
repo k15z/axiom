@@ -59,11 +59,11 @@ func newRunCmd() *cobra.Command {
 			}
 
 			if jsonOut {
-				if err := output.PrintJSON(results); err != nil {
+				if err := output.PrintJSON(results, cfg.Model); err != nil {
 					return err
 				}
 			} else {
-				output.Print(results, verbose)
+				output.Print(results, cfg.Model, verbose)
 			}
 
 			if output.HasFailures(results) {
