@@ -23,26 +23,31 @@ type testDefinition struct {
 }
 
 func Discover(testDir string) ([]Test, error) {
-	entries, err := os.ReadDir(testDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("test directory %q not found — run 'axiom init' to create it", testDir)
-		}
-		return nil, fmt.Errorf("reading test directory %s: %w", testDir, err)
+	if _, err := os.Stat(testDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("test directory %q not found — run 'axiom init' to create it", testDir)
 	}
 
+	// Walk the test directory recursively to find all YAML files
 	var files []string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
+	err := filepath.WalkDir(testDir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
-		name := e.Name()
-		if strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".yaml") {
-			if name == "config.yml" || name == "config.yaml" {
-				continue
+		if d.IsDir() {
+			if strings.HasPrefix(d.Name(), ".") && path != testDir {
+				return filepath.SkipDir
 			}
-			files = append(files, name)
+			return nil
 		}
+		name := d.Name()
+		if strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".yaml") {
+			rel, _ := filepath.Rel(testDir, path)
+			files = append(files, rel)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("reading test directory %s: %w", testDir, err)
 	}
 	sort.Strings(files)
 
@@ -54,7 +59,6 @@ func Discover(testDir string) ([]Test, error) {
 			return nil, fmt.Errorf("reading %s: %w", path, err)
 		}
 
-		// Use yaml.Decoder with KnownFields to preserve order via ordered map
 		var raw yaml.Node
 		if err := yaml.Unmarshal(data, &raw); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", path, err)
@@ -68,7 +72,6 @@ func Discover(testDir string) ([]Test, error) {
 			continue
 		}
 
-		// Iterate key-value pairs to preserve order
 		for i := 0; i < len(mapping.Content)-1; i += 2 {
 			keyNode := mapping.Content[i]
 			valNode := mapping.Content[i+1]

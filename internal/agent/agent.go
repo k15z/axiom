@@ -44,9 +44,21 @@ or
 VERDICT: FAIL
 <brief reasoning explaining what's missing or wrong>`
 
-func Run(ctx context.Context, apiKey string, model string, condition string, onGlobs []string, repoRoot string, progress ProgressFunc) (Result, error) {
+// RunOptions configures the agent loop.
+type RunOptions struct {
+	MaxIterations int
+	MaxTokens     int
+}
+
+func Run(ctx context.Context, apiKey string, model string, condition string, onGlobs []string, repoRoot string, progress ProgressFunc, opts RunOptions) (Result, error) {
 	if progress == nil {
 		progress = func(Event) {}
+	}
+	if opts.MaxIterations <= 0 {
+		opts.MaxIterations = 30
+	}
+	if opts.MaxTokens <= 0 {
+		opts.MaxTokens = 10000
 	}
 
 	client := anthropic.NewClient(option.WithAPIKey(apiKey))
@@ -69,14 +81,14 @@ func Run(ctx context.Context, apiKey string, model string, condition string, onG
 	}
 	tools := toolDefs()
 
-	maxIterations := 15
+	maxIterations := opts.MaxIterations
 	for i := 0; i < maxIterations; i++ {
 		progress(Event{Kind: "thinking", Message: fmt.Sprintf("thinking (turn %d/%d)", i+1, maxIterations)})
 
 		resp, err := callWithRetry(ctx, func() (*anthropic.Message, error) {
 			return client.Messages.New(ctx, anthropic.MessageNewParams{
 				Model:     anthropic.Model(model),
-				MaxTokens: 2048,
+				MaxTokens: int64(opts.MaxTokens),
 				System:    []anthropic.TextBlockParam{{Text: systemPrompt}},
 				Messages:  messages,
 				Tools:     tools,

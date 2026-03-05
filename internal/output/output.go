@@ -44,8 +44,12 @@ func Print(results []types.TestResult, verbose bool) {
 				green.Printf("    ✓ ")
 				fmt.Printf("%s", r.Test.Name)
 				gray.Printf(" (%.1fs)\n", r.Duration.Seconds())
-				if verbose && r.Reasoning != "" {
-					printReasoning(r.Reasoning, "      ")
+				if r.Reasoning != "" {
+					if verbose {
+						printReasoning(r.Reasoning, "      ")
+					} else {
+						gray.Printf("      %s\n", firstLine(r.Reasoning))
+					}
 				}
 			default:
 				red.Printf("    ✗ ")
@@ -129,6 +133,17 @@ func PrintJSON(results []types.TestResult) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(out)
+}
+
+func firstLine(s string) string {
+	s = strings.TrimSpace(s)
+	if idx := strings.IndexByte(s, '\n'); idx != -1 {
+		s = s[:idx]
+	}
+	if len(s) > 100 {
+		s = s[:97] + "..."
+	}
+	return s
 }
 
 func printReasoning(reasoning, indent string) {

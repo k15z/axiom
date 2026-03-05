@@ -74,7 +74,7 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&all, "all", "a", false, "Run all tests, ignoring cache")
 	cmd.Flags().StringVarP(&filter, "filter", "f", "", "Run tests matching a glob pattern")
 	cmd.Flags().StringVarP(&dir, "dir", "d", "", "Path to test directory (default: .axiom/)")
-	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show agent reasoning for all tests")
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show full agent reasoning (default: one-line summary)")
 	cmd.Flags().StringVarP(&model, "model", "m", "", "LLM model to use")
 	cmd.Flags().BoolVarP(&bail, "bail", "b", false, "Stop on first failure")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output results as JSON")

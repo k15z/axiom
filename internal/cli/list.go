@@ -48,7 +48,7 @@ func newListCmd() *cobra.Command {
 			for _, s := range statuses {
 				if s.Test.SourceFile != currentFile {
 					currentFile = s.Test.SourceFile
-					fmt.Printf("\n  .axiom/%s\n", currentFile)
+					fmt.Printf("\n  %s%s\n", cfg.TestDir, currentFile)
 				}
 
 				var label string

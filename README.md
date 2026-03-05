@@ -9,9 +9,9 @@ Unit tests verify *implementation*. Axiom tests verify *intent*. Define invarian
 ## Quick Start
 
 ```bash
-go install github.com/kevzettler/axiom/cmd/axiom@latest
+go install github.com/k15z/axiom/cmd/axiom@latest
 
-axiom init        # creates .axiom/ with a sample test file
+axiom init        # creates .axiom/ with a sample test and axiom.yml config
 axiom run         # runs all tests (only re-runs if trigger files changed)
 axiom run --all   # runs all tests regardless of cache
 ```
@@ -20,7 +20,7 @@ Set `ANTHROPIC_API_KEY` in your environment or a `.env` file at the project root
 
 ## Test Format
 
-Tests live in `.axiom/` as YAML files. Each file can contain multiple tests:
+Tests live in `.axiom/` as YAML files (recursively discovered). Each file can contain multiple tests:
 
 ```yaml
 test_double_finalization_prevention:
@@ -52,13 +52,15 @@ test_double_finalization_prevention:
 
 Failed tests always re-run, regardless of whether trigger files changed.
 
+Tests can be organized into subdirectories (e.g. `.axiom/security/`, `.axiom/architecture/`) — axiom discovers them recursively.
+
 ## CLI
 
 ```
 axiom <command> [flags]
 
 Commands:
-  init          Initialize .axiom/ in the current project
+  init          Initialize axiom in the current project
   run           Run behavioral tests
   list          List all tests and their cached status
   cache clear   Clear the cache, forcing all tests to re-run
@@ -67,7 +69,7 @@ Flags (run):
   -a, --all                Run all tests, ignoring cache
   -f, --filter string      Run tests matching a glob pattern (e.g. "test_auth*")
   -d, --dir string         Path to test directory (default: .axiom/)
-  -v, --verbose            Show agent reasoning for all tests (failures always show)
+  -v, --verbose            Show full agent reasoning for all tests
   -m, --model string       LLM model to use (overrides config)
   -c, --concurrency int    Number of tests to run in parallel (default: 1)
   -b, --bail               Stop on first failure
@@ -88,7 +90,7 @@ Axiom exits with code `0` if all tests pass, `1` if any fail:
 
 ## Configuration
 
-`.axiom/config.yml` (optional):
+`axiom.yml` at the project root (optional):
 
 ```yaml
 model: claude-haiku-4-5-20251001   # default model
@@ -97,6 +99,11 @@ test_dir: .axiom/
 cache:
   enabled: true
   dir: .axiom/.cache/
+
+agent:
+  max_iterations: 30    # max tool-use turns per test
+  max_tokens: 10000     # max tokens per LLM response
+  timeout: 0            # per-test timeout in seconds (0 = no timeout)
 ```
 
 `ANTHROPIC_API_KEY` can be set in the environment or a `.env` file at the project root. Existing environment variables take precedence over `.env`.
@@ -121,7 +128,7 @@ A test is skipped when: it passed last run **and** no file matching `on` has cha
 
 ## How It Works
 
-1. **Discovery** — scan `.axiom/` for YAML files, parse all test definitions.
+1. **Discovery** — recursively scan `.axiom/` for YAML files, parse all test definitions.
 2. **Cache check** — hash files matching `on` globs, compare to stored hashes. Skip if unchanged and previously passed.
 3. **Agent evaluation** — an LLM agent receives the condition and `on` globs as a starting hint, then uses tools to explore the codebase until it can make a determination.
 4. **Result** — agent responds `VERDICT: PASS` or `VERDICT: FAIL` with reasoning. Cache is updated. Exit code reflects overall result.
@@ -141,17 +148,16 @@ All tools are sandboxed to the repository root — path traversal is rejected.
 
 ## Output
 
-```
-  ▸ test_double_finalization_prevention
-    … thinking (turn 1/15)
-    → grep  UPDATE.*WHERE status.*RESOLVING  [*.py]
-    → read  orchestrator/app/market.py
+Passing tests show a one-line summary by default. Use `--verbose` for full reasoning.
 
+```
   axiom
 
   .axiom/concurrency.yml
     ✓ test_double_finalization_prevention (8.4s)
+      CAS mechanism found via UPDATE...WHERE status = RESOLVING RETURNING id
     ✓ test_atomic_balance_updates (6.1s)
+      All balance mutations use SELECT FOR UPDATE within a transaction
 
   .axiom/auth.yml
     ✗ test_auth_middleware (9.2s)
@@ -167,15 +173,20 @@ All tools are sandboxed to the repository root — path traversal is rejected.
 
 ```
 axiom/
+├── axiom.yml              # project config (model, agent settings, cache)
+├── .axiom/                # test definitions (recursively discovered)
+│   ├── architecture.yml
+│   ├── security.yml
+│   └── features/          # subdirectories supported
+│       └── auth.yml
 ├── cmd/axiom/main.go
 └── internal/
-    ├── agent/
-    │   ├── agent.go      # agentic tool loop
-    │   └── tools.go      # read_file, glob, grep, list_dir
-    ├── cache/cache.go    # content-hash cache
-    ├── cli/              # cobra commands
-    ├── config/config.go  # config + .env loading
-    ├── discovery/        # YAML test parsing
-    ├── output/           # terminal + JSON output
-    └── runner/runner.go  # orchestration + parallel execution
+    ├── agent/             # agentic tool loop
+    ├── cache/             # content-hash cache
+    ├── cli/               # cobra commands
+    ├── config/            # config + .env loading
+    ├── discovery/         # recursive YAML test parsing
+    ├── display/           # live terminal spinner
+    ├── output/            # terminal + JSON output
+    └── runner/            # orchestration + parallel execution
 ```

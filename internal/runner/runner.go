@@ -115,7 +115,19 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 			}
 
 			start := time.Now()
-			result, err := agent.Run(ctx, cfg.APIKey, cfg.Model, t.Condition, t.On, repoRoot, progress)
+
+			// Per-test timeout
+			runCtx := ctx
+			if cfg.Agent.Timeout > 0 {
+				var timeoutCancel context.CancelFunc
+				runCtx, timeoutCancel = context.WithTimeout(ctx, time.Duration(cfg.Agent.Timeout)*time.Second)
+				defer timeoutCancel()
+			}
+
+			result, err := agent.Run(runCtx, cfg.APIKey, cfg.Model, t.Condition, t.On, repoRoot, progress, agent.RunOptions{
+				MaxIterations: cfg.Agent.MaxIterations,
+				MaxTokens:     cfg.Agent.MaxTokens,
+			})
 			duration := time.Since(start)
 
 			tr := types.TestResult{Test: t, Duration: duration}

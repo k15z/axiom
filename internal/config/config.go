@@ -4,18 +4,27 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 type CacheConfig struct {
-	Enabled bool
-	Dir     string
+	Enabled bool   `yaml:"enabled"`
+	Dir     string `yaml:"dir"`
+}
+
+type AgentConfig struct {
+	MaxIterations int `yaml:"max_iterations"`
+	MaxTokens     int `yaml:"max_tokens"`
+	Timeout       int `yaml:"timeout"` // per-test timeout in seconds; 0 means no timeout
 }
 
 type Config struct {
-	Model   string
-	TestDir string
-	Cache   CacheConfig
-	APIKey  string
+	Model   string      `yaml:"model"`
+	TestDir string      `yaml:"test_dir"`
+	Cache   CacheConfig `yaml:"cache"`
+	Agent   AgentConfig `yaml:"agent"`
+	APIKey  string      `yaml:"-"`
 }
 
 func Default() Config {
@@ -26,6 +35,11 @@ func Default() Config {
 			Enabled: true,
 			Dir:     ".axiom/.cache/",
 		},
+		Agent: AgentConfig{
+			MaxIterations: 30,
+			MaxTokens:     10000,
+			Timeout:       0,
+		},
 	}
 }
 
@@ -34,6 +48,30 @@ func Load(testDir string) (Config, error) {
 	loadDotEnv()
 
 	cfg := Default()
+
+	// Load axiom.yml from the project root if it exists
+	if data, err := os.ReadFile("axiom.yml"); err == nil {
+		if err := yaml.Unmarshal(data, &cfg); err != nil {
+			return cfg, fmt.Errorf("parsing axiom.yml: %w", err)
+		}
+		// Re-apply defaults for zero values that weren't explicitly set
+		d := Default()
+		if cfg.Model == "" {
+			cfg.Model = d.Model
+		}
+		if cfg.TestDir == "" {
+			cfg.TestDir = d.TestDir
+		}
+		if cfg.Cache.Dir == "" {
+			cfg.Cache.Dir = d.Cache.Dir
+		}
+		if cfg.Agent.MaxIterations == 0 {
+			cfg.Agent.MaxIterations = d.Agent.MaxIterations
+		}
+		if cfg.Agent.MaxTokens == 0 {
+			cfg.Agent.MaxTokens = d.Agent.MaxTokens
+		}
+	}
 
 	if testDir != "" {
 		cfg.TestDir = testDir
