@@ -108,3 +108,59 @@ func TestToolTree(t *testing.T) {
 		}
 	})
 }
+
+func TestSafePath(t *testing.T) {
+	// Create a temp directory to act as the repo root.
+	root := t.TempDir()
+
+	// Create a subdirectory so subpath tests resolve.
+	os.MkdirAll(filepath.Join(root, "sub", "dir"), 0o755)
+
+	rootAbs, _ := filepath.Abs(root)
+
+	tests := []struct {
+		name    string
+		rel     string
+		wantAbs string // expected absolute path ("" means check error instead)
+		wantErr bool
+	}{
+		{"empty rel returns root", "", rootAbs, false},
+		{"simple subpath", "sub", filepath.Join(rootAbs, "sub"), false},
+		{"nested subpath", "sub/dir", filepath.Join(rootAbs, "sub", "dir"), false},
+		{"dot-dot escape", "../outside", "", true},
+		{"deep dot-dot escape", "sub/../../outside", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := safePath(tt.rel, root)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("safePath(%q, root) = %q, want error", tt.rel, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("safePath(%q, root) unexpected error: %v", tt.rel, err)
+			}
+			if got != tt.wantAbs {
+				t.Errorf("safePath(%q, root) = %q, want %q", tt.rel, got, tt.wantAbs)
+			}
+		})
+	}
+}
+
+func TestSafePath_SiblingPrefix(t *testing.T) {
+	// Ensure /tmp/repo doesn't match /tmp/repobar.
+	parent := t.TempDir()
+	root := filepath.Join(parent, "repo")
+	sibling := filepath.Join(parent, "repobar")
+	os.Mkdir(root, 0o755)
+	os.Mkdir(sibling, 0o755)
+
+	// "../repobar" from root resolves to sibling — must be rejected.
+	_, err := safePath("../repobar", root)
+	if err == nil {
+		t.Error("safePath should reject sibling directory with shared prefix")
+	}
+}
