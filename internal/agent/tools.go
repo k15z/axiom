@@ -21,13 +21,21 @@ func ToolDefs() []anthropic.ToolUnionParam {
 	return []anthropic.ToolUnionParam{
 		{OfTool: &anthropic.ToolParam{
 			Name:        "read_file",
-			Description: anthropic.String("Read the contents of a file. Returns the file contents with line numbers."),
+			Description: anthropic.String("Read the contents of a file. Returns the file contents with line numbers. Use start_line/end_line to read a specific range instead of the whole file."),
 			InputSchema: jsonSchema(map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"path": map[string]any{
 						"type":        "string",
 						"description": "Relative path to the file from the repository root",
+					},
+					"start_line": map[string]any{
+						"type":        "integer",
+						"description": "First line to read (1-based, inclusive). If omitted, reads from the beginning.",
+					},
+					"end_line": map[string]any{
+						"type":        "integer",
+						"description": "Last line to read (1-based, inclusive). If omitted, reads to the end.",
 					},
 				},
 				"required": []string{"path"},
@@ -98,7 +106,7 @@ func ExecuteTool(name string, inputJSON json.RawMessage, repoRoot string) (strin
 
 	switch name {
 	case "read_file":
-		return toolReadFile(getString(input, "path"), repoRoot)
+		return toolReadFile(getString(input, "path"), getInt(input, "start_line"), getInt(input, "end_line"), repoRoot)
 	case "glob":
 		return toolGlob(getString(input, "pattern"), repoRoot)
 	case "grep":
@@ -113,6 +121,11 @@ func ExecuteTool(name string, inputJSON json.RawMessage, repoRoot string) (strin
 func getString(m map[string]any, key string) string {
 	v, _ := m[key].(string)
 	return v
+}
+
+func getInt(m map[string]any, key string) int {
+	v, _ := m[key].(float64) // JSON numbers decode as float64
+	return int(v)
 }
 
 func safePath(rel, root string) (string, error) {
@@ -132,7 +145,7 @@ func safePath(rel, root string) (string, error) {
 	return abs, nil
 }
 
-func toolReadFile(path, root string) (string, bool) {
+func toolReadFile(path string, startLine, endLine int, root string) (string, bool) {
 	abs, err := safePath(path, root)
 	if err != nil {
 		return err.Error(), true
@@ -144,9 +157,30 @@ func toolReadFile(path, root string) (string, bool) {
 	}
 
 	lines := strings.Split(string(data), "\n")
+	totalLines := len(lines)
+
+	// Apply line range (1-based, inclusive)
+	start := 1
+	end := totalLines
+	if startLine > 0 {
+		start = startLine
+	}
+	if endLine > 0 {
+		end = endLine
+	}
+	if start > totalLines {
+		return fmt.Sprintf("start_line %d is beyond end of file (%d lines)", start, totalLines), true
+	}
+	if end > totalLines {
+		end = totalLines
+	}
+
 	var b strings.Builder
-	for i, line := range lines {
-		fmt.Fprintf(&b, "%4d | %s\n", i+1, line)
+	if start > 1 || end < totalLines {
+		fmt.Fprintf(&b, "[lines %d-%d of %d]\n", start, end, totalLines)
+	}
+	for i := start - 1; i < end; i++ {
+		fmt.Fprintf(&b, "%4d | %s\n", i+1, lines[i])
 	}
 
 	return truncate(b.String()), false
@@ -229,13 +263,13 @@ func toolGrep(pattern, globFilter, root string) (string, bool) {
 			return nil
 		}
 
-		// Apply filename glob filter
-		if globFilter != "" && !glob.Match(globFilter, d.Name()) {
+		rel, err := filepath.Rel(rootAbs, path)
+		if err != nil {
 			return nil
 		}
 
-		rel, err := filepath.Rel(rootAbs, path)
-		if err != nil {
+		// Apply glob filter against relative path (supports directory scoping like "internal/**/*.go")
+		if globFilter != "" && !glob.Match(globFilter, rel) {
 			return nil
 		}
 

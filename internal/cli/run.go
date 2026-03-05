@@ -25,9 +25,15 @@ func newRunCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "run",
+		Use:   "run [test-name]",
 		Short: "Run behavioral tests",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Positional arg overrides --filter
+			if len(args) == 1 {
+				filter = args[0]
+			}
+
 			cfg, err := config.Load(dir)
 			if err != nil {
 				return err

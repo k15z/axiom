@@ -12,8 +12,9 @@ Unit tests verify *implementation*. Axiom tests verify *intent*. Define invarian
 go install github.com/k15z/axiom/cmd/axiom@latest
 
 axiom init        # creates .axiom/ with a sample test and axiom.yml config
-axiom run         # runs all tests (only re-runs if trigger files changed)
-axiom run --all   # runs all tests regardless of cache
+axiom run                        # runs all tests (only re-runs if trigger files changed)
+axiom run test_auth_middleware   # run a single test by name
+axiom run --all                  # runs all tests regardless of cache
 ```
 
 Set `ANTHROPIC_API_KEY` in your environment or a `.env` file at the project root — axiom loads it automatically.
@@ -60,10 +61,10 @@ Tests can be organized into subdirectories (e.g. `.axiom/security/`, `.axiom/arc
 axiom <command> [flags]
 
 Commands:
-  init          Initialize axiom in the current project
-  run           Run behavioral tests
-  list          List all tests and their cached status
-  cache clear   Clear the cache, forcing all tests to re-run
+  init                  Initialize axiom in the current project
+  run [test-name]       Run behavioral tests (optionally a single test by name)
+  list                  List all tests and their cached status
+  cache clear           Clear the cache, forcing all tests to re-run
 
 Flags (run):
   -a, --all                Run all tests, ignoring cache

@@ -2,22 +2,27 @@
 
 Planned improvements for axiom, roughly in priority order.
 
+## Agent Tools
+
+- **`read_file` line ranges** — add optional `start_line`/`end_line` params so the agent can read a slice of a large file instead of the whole thing. Biggest single efficiency win for real codebases.
+- **Fix `grep` glob filter to match paths** — currently matches only the filename (`d.Name()`), so `internal/**/*.go` doesn't work. Should match the relative path so the agent can scope searches to subdirectories.
+- **`tree` tool** — recursive directory listing with a depth limit. Gives the agent a structural overview in one call instead of chaining `list_dir`.
+
 ## Developer Experience
 
+- **`axiom run <test-name>`** — run a single test by name as a positional arg, without needing `--filter`
 - **Watch mode** (`axiom run --watch`) — re-run affected tests when source files change, using `on` globs as file watchers
-- **`axiom run <test-name>`** — run a single test by name without needing `--filter`
-- **Smarter `axiom init`** — detect project language and generate a relevant example test instead of a Go-specific one
-- **Token/cost reporting** — show API usage summary after runs (e.g. "4 tests, 12 API calls, ~$0.03") to help users budget
+- **`axiom add <intent>`** — interactively generate a single test from a natural-language description (e.g. `axiom add "all API routes require auth"`)
+- **`axiom explain <test-name>`** — show the cached reasoning from the last run without re-running the test
+
+## Robustness
+
+- **Streaming API calls** — use streaming for long agent runs to show real-time reasoning, not just tool-call summaries
+- **Go unit tests for core packages** — table-driven tests for `safePath`, `glob.Match`, `cache.ShouldSkip`, discovery ordering, verdict parsing
 
 ## CI / Adoption
 
 - **Reusable GitHub Action** — publish `uses: k15z/axiom-action@v1` so users don't have to write CI boilerplate
-- **Go unit tests for core packages** — table-driven tests for `safePath`, `glob.Match`, `cache.ShouldSkip`, discovery ordering
-
-## Robustness
-
-- **Replace system `grep`** — use a Go-native grep implementation to avoid dependency on the `grep` binary (Windows, minimal containers)
-- **Streaming API calls** — use streaming for long agent runs to show real-time progress and avoid timeouts
 
 ## Future Ideas
 

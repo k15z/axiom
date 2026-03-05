@@ -34,7 +34,7 @@ type ProgressFunc func(Event)
 
 const systemPrompt = `You evaluate whether a condition holds for a codebase. Be efficient.
 
-Tools: read_file, glob, grep, list_dir. Use grep to locate relevant code quickly rather than reading entire files.
+Tools: read_file (supports start_line/end_line for partial reads), glob, grep, list_dir. Use grep to locate relevant code quickly, then read_file with line ranges instead of reading entire files.
 
 Strategy:
 1. Start with the hinted files/patterns
@@ -176,7 +176,15 @@ func formatToolCall(name string, input json.RawMessage) string {
 
 	switch name {
 	case "read_file":
-		return fmt.Sprintf("read  %s", args["path"])
+		s := fmt.Sprintf("read  %s", args["path"])
+		if start, ok := args["start_line"].(float64); ok {
+			if end, ok := args["end_line"].(float64); ok {
+				s += fmt.Sprintf(":%d-%d", int(start), int(end))
+			} else {
+				s += fmt.Sprintf(":%d-", int(start))
+			}
+		}
+		return s
 	case "list_dir":
 		return fmt.Sprintf("ls    %s", args["path"])
 	case "glob":
