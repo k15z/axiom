@@ -6,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/fatih/color"
 	"github.com/k15z/axiom/internal/config"
@@ -48,17 +46,17 @@ intent, security invariants, and design constraints.`,
 
 			// Progress display
 			tty := isatty.IsTerminal(os.Stderr.Fd())
-			spinner := newInitSpinner(tty)
-			spinner.start()
+			spin := newSpinner(tty, "analyzing codebase…")
+			spin.start()
 
 			yamlContent, err := scaffold.GenerateTests(
 				context.Background(),
 				apiKey, model, repoRoot,
 				func(msg string) {
-					spinner.update(msg)
+					spin.update(msg)
 				},
 			)
-			spinner.stop()
+			spin.stop()
 
 			if err != nil {
 				return fmt.Errorf("generating tests: %w", err)
@@ -112,76 +110,3 @@ func printGeneratedTests(yaml string) {
 	}
 }
 
-// initSpinner provides a simple single-line spinner for the init process.
-type initSpinner struct {
-	tty    bool
-	mu     sync.Mutex
-	status string
-	frame  int
-	stopCh chan struct{}
-	done   chan struct{}
-}
-
-var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-
-func newInitSpinner(tty bool) *initSpinner {
-	return &initSpinner{
-		tty:    tty,
-		status: "analyzing codebase…",
-		stopCh: make(chan struct{}),
-		done:   make(chan struct{}),
-	}
-}
-
-func (s *initSpinner) start() {
-	if !s.tty {
-		fmt.Fprintln(os.Stderr, "Analyzing codebase...")
-		go func() {
-			defer close(s.done)
-			for {
-				select {
-				case <-s.stopCh:
-					return
-				}
-			}
-		}()
-		return
-	}
-	go func() {
-		defer close(s.done)
-		ticker := time.NewTicker(80 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-s.stopCh:
-				// Clear the spinner line
-				fmt.Fprintf(os.Stderr, "\033[2K\r")
-				return
-			case <-ticker.C:
-				s.mu.Lock()
-				frame := spinnerFrames[s.frame%len(spinnerFrames)]
-				status := s.status
-				s.frame++
-				s.mu.Unlock()
-				cyan := color.New(color.FgCyan).SprintFunc()
-				gray := color.New(color.FgHiBlack).SprintFunc()
-				fmt.Fprintf(os.Stderr, "\033[2K\r  %s %s", cyan(frame), gray(status))
-			}
-		}
-	}()
-}
-
-func (s *initSpinner) update(msg string) {
-	if !s.tty {
-		fmt.Fprintf(os.Stderr, "  → %s\n", msg)
-		return
-	}
-	s.mu.Lock()
-	s.status = msg
-	s.mu.Unlock()
-}
-
-func (s *initSpinner) stop() {
-	close(s.stopCh)
-	<-s.done
-}
