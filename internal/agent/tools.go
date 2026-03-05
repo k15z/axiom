@@ -87,6 +87,24 @@ func ToolDefs() []anthropic.ToolUnionParam {
 				"required": []string{"path"},
 			}),
 		}},
+		{OfTool: &anthropic.ToolParam{
+			Name:        "tree",
+			Description: anthropic.String("Recursively list a directory tree with depth limit. Returns an indented tree of files and directories, useful for understanding project structure."),
+			InputSchema: jsonSchema(map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"path": map[string]any{
+						"type":        "string",
+						"description": "Relative path to the directory from the repository root. Use '.' for the root.",
+					},
+					"depth": map[string]any{
+						"type":        "integer",
+						"description": "Maximum depth to recurse (default 3). 1 = immediate children only.",
+					},
+				},
+				"required": []string{"path"},
+			}),
+		}},
 	}
 }
 
@@ -113,6 +131,8 @@ func ExecuteTool(name string, inputJSON json.RawMessage, repoRoot string) (strin
 		return toolGrep(getString(input, "pattern"), getString(input, "glob"), repoRoot)
 	case "list_dir":
 		return toolListDir(getString(input, "path"), repoRoot)
+	case "tree":
+		return toolTree(getString(input, "path"), getInt(input, "depth"), repoRoot)
 	default:
 		return fmt.Sprintf("unknown tool: %s", name), true
 	}
@@ -322,6 +342,99 @@ func toolListDir(path, root string) (string, bool) {
 			suffix = "/"
 		}
 		fmt.Fprintf(&b, "%s%s\n", e.Name(), suffix)
+	}
+
+	return truncate(b.String()), false
+}
+
+const (
+	treeMaxEntriesPerDir = 50
+	treeMaxEntriesTotal  = 1000
+)
+
+func toolTree(path string, depth int, root string) (string, bool) {
+	abs, err := safePath(path, root)
+	if err != nil {
+		return err.Error(), true
+	}
+
+	if depth < 1 {
+		depth = 3
+	}
+
+	var b strings.Builder
+	totalEntries := 0
+	limitReached := false
+
+	var walk func(dir string, prefix string, currentDepth int)
+	walk = func(dir string, prefix string, currentDepth int) {
+		if limitReached || currentDepth > depth {
+			return
+		}
+
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return
+		}
+
+		// Filter hidden entries
+		var visible []os.DirEntry
+		for _, e := range entries {
+			if !strings.HasPrefix(e.Name(), ".") {
+				visible = append(visible, e)
+			}
+		}
+
+		dirCount := len(visible)
+		shown := 0
+		for i, e := range visible {
+			if limitReached {
+				return
+			}
+			if shown >= treeMaxEntriesPerDir {
+				fmt.Fprintf(&b, "%s... (%d more entries)\n", prefix, dirCount-shown)
+				break
+			}
+
+			totalEntries++
+			if totalEntries > treeMaxEntriesTotal {
+				limitReached = true
+				fmt.Fprintf(&b, "%s... (entry limit reached)\n", prefix)
+				return
+			}
+
+			isLast := i == len(visible)-1
+			connector := "├── "
+			childPrefix := prefix + "│   "
+			if isLast || (shown == treeMaxEntriesPerDir-1 && i < len(visible)-1) {
+				connector = "└── "
+				childPrefix = prefix + "    "
+			}
+
+			name := e.Name()
+			if e.IsDir() {
+				name += "/"
+			}
+			fmt.Fprintf(&b, "%s%s%s\n", prefix, connector, name)
+			shown++
+
+			if e.IsDir() {
+				walk(filepath.Join(dir, e.Name()), childPrefix, currentDepth+1)
+			}
+		}
+	}
+
+	// Print root directory name
+	rootAbs, _ := filepath.Abs(root)
+	rel, _ := filepath.Rel(rootAbs, abs)
+	if rel == "." {
+		rel = "."
+	}
+	fmt.Fprintf(&b, "%s/\n", rel)
+	walk(abs, "", 1)
+
+	if b.Len() == 0 {
+		return "empty directory", false
 	}
 
 	return truncate(b.String()), false

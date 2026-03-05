@@ -34,7 +34,7 @@ type ProgressFunc func(Event)
 
 const systemPrompt = `You evaluate whether a condition holds for a codebase. Be efficient.
 
-Tools: read_file (supports start_line/end_line for partial reads), glob, grep, list_dir. Use grep to locate relevant code quickly, then read_file with line ranges instead of reading entire files.
+Tools: read_file (supports start_line/end_line for partial reads), glob, grep, list_dir, tree. Use tree to understand project structure, grep to locate relevant code quickly, then read_file with line ranges instead of reading entire files.
 
 Strategy:
 1. Start with the hinted files/patterns
