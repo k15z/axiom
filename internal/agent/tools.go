@@ -1,12 +1,13 @@
 package agent
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -199,37 +200,71 @@ func toolGlob(pattern, root string) (string, bool) {
 	return truncate(strings.Join(matches, "\n")), false
 }
 
-func toolGrep(pattern, glob, root string) (string, bool) {
+func toolGrep(pattern, globFilter, root string) (string, bool) {
 	// The glob filter is a filename-only pattern (e.g. "*.go"); reject path traversal
-	if strings.Contains(glob, "..") || strings.HasPrefix(glob, "/") {
-		return fmt.Sprintf("invalid glob filter %q: must be a filename pattern, not a path", glob), true
+	if strings.Contains(globFilter, "..") || strings.HasPrefix(globFilter, "/") {
+		return fmt.Sprintf("invalid glob filter %q: must be a filename pattern, not a path", globFilter), true
 	}
 
-	// Validate root is accessible (sanity check via safePath with empty rel)
 	rootAbs, err := safePath("", root)
 	if err != nil {
 		return err.Error(), true
 	}
 
-	args := []string{"-rn", "--color=never"}
-	if glob != "" {
-		args = append(args, "--include="+glob)
-	}
-	args = append(args, pattern, rootAbs)
-
-	cmd := exec.Command("grep", args...)
-	out, err := cmd.Output()
+	re, err := regexp.Compile(pattern)
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-			return "no matches found", false
-		}
-		return fmt.Sprintf("grep error: %s", err), true
+		return fmt.Sprintf("invalid regex pattern: %s", err), true
 	}
 
-	// Make paths relative
-	result := strings.ReplaceAll(string(out), rootAbs+"/", "")
+	var b strings.Builder
+	filepath.WalkDir(rootAbs, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		// Skip hidden dirs (like .git)
+		if d.IsDir() && strings.HasPrefix(d.Name(), ".") && path != rootAbs {
+			return filepath.SkipDir
+		}
+		if d.IsDir() {
+			return nil
+		}
 
-	return truncate(result), false
+		// Apply filename glob filter
+		if globFilter != "" && !glob.Match(globFilter, d.Name()) {
+			return nil
+		}
+
+		rel, err := filepath.Rel(rootAbs, path)
+		if err != nil {
+			return nil
+		}
+
+		f, err := os.Open(path)
+		if err != nil {
+			return nil
+		}
+		defer f.Close()
+
+		scanner := bufio.NewScanner(f)
+		lineNum := 0
+		for scanner.Scan() {
+			lineNum++
+			line := scanner.Text()
+			if re.MatchString(line) {
+				fmt.Fprintf(&b, "%s:%d:%s\n", rel, lineNum, line)
+				if b.Len() > maxOutputBytes {
+					return fs.SkipAll
+				}
+			}
+		}
+		return nil
+	})
+
+	if b.Len() == 0 {
+		return "no matches found", false
+	}
+
+	return truncate(b.String()), false
 }
 
 func toolListDir(path, root string) (string, bool) {
