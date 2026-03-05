@@ -59,10 +59,12 @@ func newRunCmd() *cobra.Command {
 			}
 
 			if jsonOut {
-				return output.PrintJSON(results)
+				if err := output.PrintJSON(results); err != nil {
+					return err
+				}
+			} else {
+				output.Print(results, verbose)
 			}
-
-			output.Print(results, verbose)
 
 			if output.HasFailures(results) {
 				os.Exit(1)
