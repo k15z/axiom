@@ -12,6 +12,7 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
 	"github.com/k15z/axiom/internal/agent"
 )
 
@@ -166,17 +167,19 @@ func GenerateTests(ctx context.Context, apiKey, model, repoRoot string, progress
 		anthropic.NewUserMessage(anthropic.NewTextBlock(userMsg)),
 	}
 
+	params := anthropic.MessageNewParams{
+		Model:     anthropic.Model(model),
+		MaxTokens: int64(16000),
+		System:    []anthropic.TextBlockParam{{Text: initSystemPrompt}},
+		Tools:     tools,
+	}
+
 	maxIterations := 20
 	for i := 0; i < maxIterations; i++ {
 		progress(fmt.Sprintf("thinking (turn %d/%d)", i+1, maxIterations))
 
-		resp, err := client.Messages.New(ctx, anthropic.MessageNewParams{
-			Model:     anthropic.Model(model),
-			MaxTokens: int64(16000),
-			System:    []anthropic.TextBlockParam{{Text: initSystemPrompt}},
-			Messages:  messages,
-			Tools:     tools,
-		})
+		params.Messages = messages
+		resp, err := consumeStream(client.Messages.NewStreaming(ctx, params))
 		if err != nil {
 			return "", fmt.Errorf("API call failed: %w", err)
 		}
@@ -221,6 +224,21 @@ func extractYAML(text string) string {
 		return ""
 	}
 	return strings.TrimSpace(m[1])
+}
+
+// consumeStream reads all events from a streaming response and returns the accumulated Message.
+func consumeStream(stream *ssestream.Stream[anthropic.MessageStreamEventUnion]) (*anthropic.Message, error) {
+	defer stream.Close()
+	var msg anthropic.Message
+	for stream.Next() {
+		if err := msg.Accumulate(stream.Current()); err != nil {
+			return nil, fmt.Errorf("stream accumulate: %w", err)
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return nil, err
+	}
+	return &msg, nil
 }
 
 func formatToolCall(name string, input json.RawMessage) string {

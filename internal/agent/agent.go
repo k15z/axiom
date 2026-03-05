@@ -9,6 +9,7 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
 )
 
 type Usage struct {
@@ -25,7 +26,7 @@ type Result struct {
 
 // Event is emitted by the agent during execution to report progress.
 type Event struct {
-	Kind    string // "thinking" | "tool_call" | "done"
+	Kind    string // "thinking" | "tool_call" | "text"
 	Message string // human-readable description
 }
 
@@ -90,19 +91,19 @@ func Run(ctx context.Context, apiKey string, model string, condition string, onG
 
 	var usage Usage
 
+	params := anthropic.MessageNewParams{
+		Model:     anthropic.Model(model),
+		MaxTokens: int64(opts.MaxTokens),
+		System:    []anthropic.TextBlockParam{{Text: systemPrompt}},
+		Tools:     tools,
+	}
+
 	maxIterations := opts.MaxIterations
 	for i := 0; i < maxIterations; i++ {
 		progress(Event{Kind: "thinking", Message: fmt.Sprintf("thinking (turn %d/%d)", i+1, maxIterations)})
 
-		resp, err := callWithRetry(ctx, func() (*anthropic.Message, error) {
-			return client.Messages.New(ctx, anthropic.MessageNewParams{
-				Model:     anthropic.Model(model),
-				MaxTokens: int64(opts.MaxTokens),
-				System:    []anthropic.TextBlockParam{{Text: systemPrompt}},
-				Messages:  messages,
-				Tools:     tools,
-			})
-		})
+		params.Messages = messages
+		resp, err := streamWithRetry(ctx, client, params, progress)
 		if err != nil {
 			return Result{Usage: usage}, fmt.Errorf("API call failed: %w", err)
 		}
@@ -144,11 +145,36 @@ func Run(ctx context.Context, apiKey string, model string, condition string, onG
 	}, nil
 }
 
-// callWithRetry retries the API call on 429 rate limit errors with exponential backoff.
-func callWithRetry(ctx context.Context, fn func() (*anthropic.Message, error)) (*anthropic.Message, error) {
+// consumeStream reads all events from a streaming response, emitting text events
+// for real-time reasoning display, and returns the fully accumulated Message.
+func consumeStream(stream *ssestream.Stream[anthropic.MessageStreamEventUnion], progress ProgressFunc) (*anthropic.Message, error) {
+	defer stream.Close()
+
+	var msg anthropic.Message
+	for stream.Next() {
+		event := stream.Current()
+		if err := msg.Accumulate(event); err != nil {
+			return nil, fmt.Errorf("stream accumulate: %w", err)
+		}
+		// Emit streamed text deltas so the display can show live reasoning
+		if delta, ok := event.AsAny().(anthropic.ContentBlockDeltaEvent); ok {
+			if td, ok := delta.Delta.AsAny().(anthropic.TextDelta); ok && td.Text != "" {
+				progress(Event{Kind: "text", Message: td.Text})
+			}
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return nil, err
+	}
+	return &msg, nil
+}
+
+// streamWithRetry opens a streaming API call with retry on 429 rate limit errors.
+func streamWithRetry(ctx context.Context, client anthropic.Client, params anthropic.MessageNewParams, progress ProgressFunc) (*anthropic.Message, error) {
 	delays := []time.Duration{5 * time.Second, 15 * time.Second, 30 * time.Second, 60 * time.Second}
 	for attempt, maxAttempts := 0, len(delays)+1; attempt < maxAttempts; attempt++ {
-		msg, err := fn()
+		stream := client.Messages.NewStreaming(ctx, params)
+		msg, err := consumeStream(stream, progress)
 		if err == nil {
 			return msg, nil
 		}

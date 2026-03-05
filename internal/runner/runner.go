@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -101,13 +102,26 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 
 			live.StartTest(t.Name)
 
+			var textBuf strings.Builder
 			progress := func(e agent.Event) {
 				var status string
 				switch e.Kind {
 				case "thinking":
+					textBuf.Reset()
 					status = e.Message
 				case "tool_call":
+					textBuf.Reset()
 					status = "→ " + e.Message
+				case "text":
+					textBuf.WriteString(e.Message)
+					// Show last line of accumulated text as status
+					s := textBuf.String()
+					s = strings.ReplaceAll(s, "\n", " ")
+					s = strings.TrimSpace(s)
+					if s == "" {
+						return
+					}
+					status = "✎ " + s
 				default:
 					return
 				}
