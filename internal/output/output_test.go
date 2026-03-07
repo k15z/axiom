@@ -264,6 +264,34 @@ func TestHasErrors_NoErrors(t *testing.T) {
 	}
 }
 
+// --- HasFlaky ---
+
+func TestHasFlaky_Empty(t *testing.T) {
+	if HasFlaky(nil) {
+		t.Error("empty slice should return false")
+	}
+}
+
+func TestHasFlaky_OneFlaky(t *testing.T) {
+	results := []types.TestResult{
+		{Passed: true},
+		{Passed: true, Flaky: true},
+	}
+	if !HasFlaky(results) {
+		t.Error("one flaky result should return true")
+	}
+}
+
+func TestHasFlaky_NoFlaky(t *testing.T) {
+	results := []types.TestResult{
+		{Passed: true},
+		{Passed: false},
+	}
+	if HasFlaky(results) {
+		t.Error("no flaky results should return false")
+	}
+}
+
 // --- CISummary ---
 
 func TestCISummary(t *testing.T) {

@@ -518,3 +518,13 @@ func HasErrors(results []types.TestResult) bool {
 	}
 	return false
 }
+
+// HasFlaky returns true if any test result was marked flaky (passed on retry).
+func HasFlaky(results []types.TestResult) bool {
+	for _, r := range results {
+		if r.Flaky {
+			return true
+		}
+	}
+	return false
+}

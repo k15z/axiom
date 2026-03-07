@@ -34,6 +34,7 @@ func newRunCmd() *cobra.Command {
 		retries     int
 		dryRun      bool
 		watchMode   bool
+		strict      bool
 	)
 
 	cmd := &cobra.Command{
@@ -153,6 +154,9 @@ func newRunCmd() *cobra.Command {
 			if output.HasFailures(results) {
 				os.Exit(1)
 			}
+			if strict && output.HasFlaky(results) {
+				os.Exit(1)
+			}
 			if output.HasErrors(results) {
 				os.Exit(2)
 			}
@@ -174,6 +178,7 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().IntVar(&retries, "retries", 0, "Re-run failed tests up to N times; if a retry passes, mark as flaky")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview which tests would run vs be skipped and estimate token cost, without calling the API")
 	cmd.Flags().BoolVarP(&watchMode, "watch", "w", false, "Watch for file changes and re-run affected tests")
+	cmd.Flags().BoolVar(&strict, "strict", false, "Treat flaky tests (passed on retry) as failures")
 
 	return cmd
 }
