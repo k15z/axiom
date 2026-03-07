@@ -215,6 +215,68 @@ func formatTokens(n int) string {
 	return fmt.Sprintf("%d", n)
 }
 
+// PrintDryRun displays which tests would run vs be skipped (cached) and
+// estimates the maximum token cost without calling the API.
+func PrintDryRun(statuses []types.TestStatus, model string, maxTokensPerTest int) {
+	fmt.Println()
+	bold.Println("  axiom  --dry-run")
+	fmt.Println()
+
+	// Group by source file (same pattern as Print)
+	groups := make(map[string][]types.TestStatus)
+	var order []string
+	for _, s := range statuses {
+		if _, seen := groups[s.Test.SourceFile]; !seen {
+			order = append(order, s.Test.SourceFile)
+		}
+		groups[s.Test.SourceFile] = append(groups[s.Test.SourceFile], s)
+	}
+
+	wouldRun := 0
+	wouldSkip := 0
+	for _, file := range order {
+		gray.Printf("  .axiom/%s\n", file)
+		for _, s := range groups[file] {
+			if strings.HasPrefix(s.Status, "cached-") {
+				gray.Printf("    ○ %s (cached)\n", s.Test.Name)
+				wouldSkip++
+			} else {
+				fmt.Printf("    → %s", s.Test.Name)
+				gray.Printf(" (would run)\n")
+				wouldRun++
+			}
+		}
+		fmt.Println()
+	}
+
+	// Summary line
+	fmt.Print("  ")
+	parts := 0
+	if wouldRun > 0 {
+		fmt.Printf("%d would run", wouldRun)
+		parts++
+	}
+	if wouldSkip > 0 {
+		if parts > 0 {
+			fmt.Print(" · ")
+		}
+		gray.Printf("%d cached", wouldSkip)
+	}
+	fmt.Println()
+
+	// Cost estimate: input is typically ~3× maxTokens (file reads + system prompt);
+	// output is typically ~0.5× maxTokens (agent rarely hits the ceiling).
+	// Labelled as worst-case so users understand this is an upper bound.
+	if wouldRun > 0 && maxTokensPerTest > 0 {
+		estInput := wouldRun * maxTokensPerTest * 3
+		estOutput := wouldRun * maxTokensPerTest / 2
+		cost := estimateCost(model, estInput, estOutput)
+		gray.Printf("  worst-case cost estimate: ~$%.4f (%s tokens/test × %d tests)\n",
+			cost, formatTokens(maxTokensPerTest*3+maxTokensPerTest/2), wouldRun)
+	}
+	fmt.Println()
+}
+
 func HasFailures(results []types.TestResult) bool {
 	for _, r := range results {
 		if !r.Passed && !r.Cached && !r.Skipped {

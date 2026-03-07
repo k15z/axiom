@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/k15z/axiom/internal/config"
 	"github.com/k15z/axiom/internal/discovery"
 	"github.com/k15z/axiom/internal/output"
 	"github.com/k15z/axiom/internal/runner"
+	"github.com/k15z/axiom/internal/types"
 	"github.com/spf13/cobra"
 )
 
@@ -22,6 +24,7 @@ func newRunCmd() *cobra.Command {
 		bail        bool
 		jsonOut     bool
 		concurrency int
+		dryRun      bool
 	)
 
 	cmd := &cobra.Command{
@@ -34,7 +37,13 @@ func newRunCmd() *cobra.Command {
 				filter = args[0]
 			}
 
-			cfg, err := config.Load(dir)
+			var cfg config.Config
+			var err error
+			if dryRun {
+				cfg, err = config.LoadForDryRun(dir)
+			} else {
+				cfg, err = config.Load(dir)
+			}
 			if err != nil {
 				return err
 			}
@@ -50,6 +59,27 @@ func newRunCmd() *cobra.Command {
 
 			if len(tests) == 0 {
 				fmt.Println("No tests found. Run 'axiom init' to create sample tests.")
+				return nil
+			}
+
+			if dryRun {
+				repoRoot, _ := filepath.Abs(".")
+				statuses := runner.GetStatuses(tests, cfg.Cache.Dir, repoRoot)
+				if filter != "" {
+					var filtered []types.TestStatus
+					for _, s := range statuses {
+						if matched, _ := filepath.Match(filter, s.Test.Name); matched {
+							filtered = append(filtered, s)
+						}
+					}
+					statuses = filtered
+				}
+				if all {
+					for i := range statuses {
+						statuses[i].Status = "pending"
+					}
+				}
+				output.PrintDryRun(statuses, cfg.Model, cfg.Agent.MaxTokens)
 				return nil
 			}
 
@@ -87,6 +117,7 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&bail, "bail", "b", false, "Stop on first failure")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output results as JSON")
 	cmd.Flags().IntVarP(&concurrency, "concurrency", "c", 1, "Number of tests to run in parallel")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview which tests would run vs be skipped and estimate token cost, without calling the API")
 
 	return cmd
 }
