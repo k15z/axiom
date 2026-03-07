@@ -20,14 +20,9 @@ func newListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List all tests and their cached status",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Load config without requiring API key (list doesn't run agents)
-			cfg := config.Default()
-			if dir != "" {
-				cfg.TestDir = dir
-			}
-			// Best-effort config file load (ignore API key error)
-			if loaded, err := config.Load(dir); err == nil {
-				cfg = loaded
+			cfg, err := config.LoadWithoutKey(dir)
+			if err != nil {
+				return fmt.Errorf("loading config: %w", err)
 			}
 
 			tests, err := discovery.Discover(cfg.TestDir)

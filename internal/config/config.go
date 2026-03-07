@@ -49,16 +49,23 @@ func Default() Config {
 }
 
 func Load(testDir string) (Config, error) {
-	return load(testDir, true)
+	cfg, err := LoadWithoutKey(testDir)
+	if err != nil {
+		return cfg, err
+	}
+	return cfg, cfg.ResolveKey()
 }
 
-// LoadForDryRun loads config without requiring ANTHROPIC_API_KEY.
+// LoadForDryRun loads config without requiring an API key.
 // Used by --dry-run mode which performs discovery and cache checks only.
 func LoadForDryRun(testDir string) (Config, error) {
-	return load(testDir, false)
+	return LoadWithoutKey(testDir)
 }
 
-func load(testDir string, requireKey bool) (Config, error) {
+// LoadWithoutKey loads config from axiom.yml and .env but does not resolve the
+// provider or load the API key. Call ResolveKey() after applying CLI flag
+// overrides (e.g. --provider, --model).
+func LoadWithoutKey(testDir string) (Config, error) {
 	// Load .env before anything else so vars are available via os.Getenv
 	loadDotEnv()
 
@@ -95,24 +102,25 @@ func load(testDir string, requireKey bool) (Config, error) {
 		cfg.TestDir = testDir
 	}
 
-	if !requireKey {
-		return cfg, nil
-	}
+	return cfg, nil
+}
 
-	// Resolve provider from explicit setting or model name
+// ResolveKey resolves the provider from the model name and loads the
+// appropriate API key from the environment. Call this after applying any
+// CLI flag overrides to Provider and Model.
+func (cfg *Config) ResolveKey() error {
 	resolved, err := provider.ResolveProvider(cfg.Provider, cfg.Model)
 	if err != nil {
-		return cfg, err
+		return err
 	}
 	cfg.Provider = resolved
 
-	// Load the appropriate API key for the resolved provider
 	cfg.APIKey, err = loadAPIKeyForProvider(resolved)
 	if err != nil {
-		return cfg, err
+		return err
 	}
 
-	return cfg, nil
+	return nil
 }
 
 // LoadMinimal loads config from .env and axiom.yml without requiring

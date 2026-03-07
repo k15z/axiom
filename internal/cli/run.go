@@ -46,13 +46,7 @@ func newRunCmd() *cobra.Command {
 				filter = args[0]
 			}
 
-			var cfg config.Config
-			var err error
-			if dryRun {
-				cfg, err = config.LoadForDryRun(dir)
-			} else {
-				cfg, err = config.Load(dir)
-			}
+			cfg, err := config.LoadWithoutKey(dir)
 			if err != nil {
 				return &SetupError{Err: err}
 			}
@@ -62,6 +56,12 @@ func newRunCmd() *cobra.Command {
 			}
 			if prov != "" {
 				cfg.Provider = prov
+			}
+
+			if !dryRun {
+				if err := cfg.ResolveKey(); err != nil {
+					return &SetupError{Err: err}
+				}
 			}
 
 			// Watch mode: run tests then watch for changes

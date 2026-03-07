@@ -25,12 +25,9 @@ func newShowCmd() *cobra.Command {
 		Short: "Show cached reasoning from the last run",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg := config.Default()
-			if dir != "" {
-				cfg.TestDir = dir
-			}
-			if loaded, err := config.Load(dir); err == nil {
-				cfg = loaded
+			cfg, err := config.LoadWithoutKey(dir)
+			if err != nil {
+				return fmt.Errorf("loading config: %w", err)
 			}
 
 			tests, err := discovery.Discover(cfg.TestDir)
