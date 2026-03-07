@@ -66,11 +66,13 @@ axiom <command> [flags]
 
 Commands:
   init                  Initialize axiom in the current project
+  add <intent>          Generate a test from a natural-language description
   run [test-name]       Run behavioral tests (optionally a single test by name)
   list                  List all tests and their cached status
   show <test-name>      Show cached result and reasoning for a test
   validate              Lint test YAML files for common issues
   cache clear           Clear the cache, forcing all tests to re-run
+  version               Print the axiom version
 
 Flags (run):
   -a, --all                Run all tests, ignoring cache
@@ -79,12 +81,20 @@ Flags (run):
   -d, --dir string         Path to test directory (default: .axiom/)
   -v, --verbose            Show full agent reasoning for all tests
   -m, --model string       LLM model to use (overrides config)
+  -p, --provider string    LLM provider: anthropic, openai, or gemini
   -c, --concurrency int    Number of tests to run in parallel (0 = auto)
   -b, --bail               Stop on first failure
       --json               Output results as JSON (for CI)
+      --format string      Output format: text, json, or github (default: text)
+      --strict             Treat flaky tests as failures
   -w, --watch              Watch for file changes and re-run affected tests
       --retries int        Re-run failed tests up to N times; mark as flaky if a retry passes
       --dry-run            Preview which tests would run and estimate token cost
+
+Flags (add):
+  -m, --model string       LLM model to use
+      --file string        Target YAML file name (default: tests.yml)
+      --run                Run the test immediately after adding
 
 Flags (show):
   -d, --dir string         Path to test directory
@@ -131,7 +141,7 @@ Exit codes:
 |------|---------|
 | `0` | All tests passed (or cached/skipped) |
 | `1` | One or more tests failed |
-| `2` | Configuration or setup error (missing API key, bad YAML, test dir not found) |
+| `2` | Configuration/setup error or infrastructure error (missing API key, bad YAML, API 429/500) |
 
 In non-TTY environments (CI), axiom prints per-test progress lines to stderr as tests complete, plus a greppable summary line: `axiom: 8 passed, 1 failed, 1 cached`.
 
@@ -240,9 +250,12 @@ Passing tests show a one-line summary by default. Use `--verbose` for full reaso
       auth middleware — it accesses request.user without verify_token().
 
     ○ test_rate_limiting (cached)
+    ! test_session_handling (error, 2.1s)
 
-  3 passed · 1 failed · 1 cached
+  3 passed · 1 failed · 1 errored · 1 cached
 ```
+
+Infrastructure errors (API failures, rate limits) are shown with `!` and don't count as test failures.
 
 ## Project Structure
 
