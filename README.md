@@ -75,6 +75,7 @@ Flags (run):
   -c, --concurrency int    Number of tests to run in parallel (default: 1)
   -b, --bail               Stop on first failure
       --json               Output results as JSON (for CI)
+  -w, --watch              Watch for file changes and re-run affected tests
 ```
 
 ### CI Usage

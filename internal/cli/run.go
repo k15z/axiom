@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 
 	"github.com/k15z/axiom/internal/cache"
@@ -12,6 +13,8 @@ import (
 	"github.com/k15z/axiom/internal/output"
 	"github.com/k15z/axiom/internal/runner"
 	"github.com/k15z/axiom/internal/types"
+	"github.com/k15z/axiom/internal/watch"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
 
@@ -28,6 +31,7 @@ func newRunCmd() *cobra.Command {
 		concurrency int
 		retries     int
 		dryRun      bool
+		watchMode   bool
 	)
 
 	cmd := &cobra.Command{
@@ -53,6 +57,25 @@ func newRunCmd() *cobra.Command {
 
 			if model != "" {
 				cfg.Model = model
+			}
+
+			// Watch mode: run tests then watch for changes
+			if watchMode {
+				if !isatty.IsTerminal(os.Stderr.Fd()) {
+					fmt.Fprintln(os.Stderr, "warning: --watch requires a TTY; falling back to single run")
+				} else {
+					ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+					defer stop()
+					return watch.Run(ctx, cfg, runner.Options{
+						All:         all,
+						Filter:      filter,
+						Tag:         tag,
+						Bail:        bail,
+						Verbose:     verbose,
+						Concurrency: concurrency,
+						Retries:     retries,
+					})
+				}
 			}
 
 			tests, err := discovery.Discover(cfg.TestDir)
@@ -131,6 +154,7 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().IntVarP(&concurrency, "concurrency", "c", 0, "Number of tests to run in parallel (0 = auto)")
 	cmd.Flags().IntVar(&retries, "retries", 0, "Re-run failed tests up to N times; if a retry passes, mark as flaky")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview which tests would run vs be skipped and estimate token cost, without calling the API")
+	cmd.Flags().BoolVarP(&watchMode, "watch", "w", false, "Watch for file changes and re-run affected tests")
 
 	return cmd
 }
