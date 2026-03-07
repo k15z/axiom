@@ -326,6 +326,122 @@ func PrintDryRun(statuses []types.TestStatus, model string, maxTokensPerTest int
 	fmt.Println()
 }
 
+// PrintGitHub outputs a Markdown summary suitable for posting as a GitHub PR comment.
+func PrintGitHub(results []types.TestResult, model string) {
+	fmt.Print(FormatGitHub(results, model))
+}
+
+// FormatGitHub generates a Markdown summary of test results for GitHub PR comments.
+func FormatGitHub(results []types.TestResult, model string) string {
+	var b strings.Builder
+
+	b.WriteString("<!-- axiom-summary -->\n")
+	b.WriteString("## Axiom Test Results\n\n")
+	b.WriteString("| Test | File | Result | Duration |\n")
+	b.WriteString("|------|------|--------|----------|\n")
+
+	passed, failed, cached, skipped, flaky := 0, 0, 0, 0, 0
+	var totalUsage types.Usage
+	var failures []types.TestResult
+	var flakyTests []types.TestResult
+
+	for _, r := range results {
+		icon := ":white_check_mark: Pass"
+		dur := fmt.Sprintf("%.1fs", r.Duration.Seconds())
+
+		switch {
+		case r.Cached:
+			icon = ":grey_question: Cached"
+			dur = "-"
+			cached++
+		case r.Skipped:
+			icon = ":fast_forward: Skipped"
+			dur = "-"
+			skipped++
+		case r.Flaky:
+			icon = ":warning: Flaky"
+			flaky++
+			flakyTests = append(flakyTests, r)
+		case r.Passed:
+			passed++
+		default:
+			icon = ":x: Fail"
+			failed++
+			failures = append(failures, r)
+		}
+
+		totalUsage.InputTokens += r.Usage.InputTokens
+		totalUsage.OutputTokens += r.Usage.OutputTokens
+		totalUsage.APICalls += r.Usage.APICalls
+
+		b.WriteString(fmt.Sprintf("| %s | %s | %s | %s |\n", r.Test.Name, r.Test.SourceFile, icon, dur))
+	}
+
+	b.WriteString("\n")
+
+	// Summary line
+	var parts []string
+	if passed > 0 {
+		parts = append(parts, fmt.Sprintf("**%d passed**", passed))
+	}
+	if flaky > 0 {
+		parts = append(parts, fmt.Sprintf("**%d flaky**", flaky))
+	}
+	if failed > 0 {
+		parts = append(parts, fmt.Sprintf("**%d failed**", failed))
+	}
+	if cached > 0 {
+		parts = append(parts, fmt.Sprintf("**%d cached**", cached))
+	}
+	if skipped > 0 {
+		parts = append(parts, fmt.Sprintf("**%d skipped**", skipped))
+	}
+	if len(parts) > 0 {
+		b.WriteString(strings.Join(parts, " · "))
+		b.WriteString("\n")
+	}
+
+	// Failures details
+	if len(failures) > 0 {
+		b.WriteString("\n<details>\n<summary>Failures</summary>\n\n")
+		for _, r := range failures {
+			b.WriteString(fmt.Sprintf("### %s\n", r.Test.Name))
+			if r.Reasoning != "" {
+				b.WriteString(fmt.Sprintf("> %s\n", strings.ReplaceAll(strings.TrimSpace(r.Reasoning), "\n", "\n> ")))
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("</details>\n")
+	}
+
+	// Flaky test details
+	if len(flakyTests) > 0 {
+		b.WriteString("\n<details>\n<summary>Flaky Tests</summary>\n\n")
+		for _, r := range flakyTests {
+			b.WriteString(fmt.Sprintf("### %s\n", r.Test.Name))
+			b.WriteString(fmt.Sprintf("Passed on retry %d\n", r.Retries))
+			if r.Reasoning != "" {
+				b.WriteString(fmt.Sprintf("> %s\n", strings.ReplaceAll(strings.TrimSpace(r.Reasoning), "\n", "\n> ")))
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("</details>\n")
+	}
+
+	// Cost details
+	if totalUsage.APICalls > 0 {
+		cost := estimateCost(model, totalUsage.InputTokens, totalUsage.OutputTokens)
+		b.WriteString("\n<details>\n<summary>Cost</summary>\n\n")
+		b.WriteString(fmt.Sprintf("Model: %s · %d API calls · %s tokens · ~$%.4f\n\n",
+			model, totalUsage.APICalls,
+			formatTokens(totalUsage.InputTokens+totalUsage.OutputTokens),
+			cost))
+		b.WriteString("</details>\n")
+	}
+
+	return b.String()
+}
+
 func HasFailures(results []types.TestResult) bool {
 	for _, r := range results {
 		if !r.Passed && !r.Cached && !r.Skipped {
