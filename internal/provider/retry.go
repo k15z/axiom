@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"time"
 )
 
@@ -38,11 +39,16 @@ func WithRetry[T any](ctx context.Context, fn func() (T, error), shouldRetry fun
 		if !shouldRetry(err) || attempt == maxAttempts-1 {
 			return result, err
 		}
+		// Add jitter (±25%) to avoid thundering herd with concurrent tests
+		delay := retryDelays[attempt]
+		jitter := time.Duration(rand.Int64N(int64(delay) / 2)) - delay/4
+		delay += jitter
+
 		select {
 		case <-ctx.Done():
 			var zero T
 			return zero, ctx.Err()
-		case <-time.After(retryDelays[attempt]):
+		case <-time.After(delay):
 		}
 	}
 	// unreachable
