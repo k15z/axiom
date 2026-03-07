@@ -32,18 +32,21 @@ type slotState struct {
 
 // LiveDisplay coordinates live rendering of running tests to stderr.
 type LiveDisplay struct {
-	mu      sync.Mutex
-	slots   []*slotState
-	byName  map[string]int // name → slot index
-	ticker  *time.Ticker
-	stopCh  chan struct{}
-	lines   int // lines currently on screen (for cursor-up)
+	mu        sync.Mutex
+	slots     []*slotState
+	byName    map[string]int // name → slot index
+	ticker    *time.Ticker
+	stopCh    chan struct{}
+	lines     int // lines currently on screen (for cursor-up)
+	total     int // total number of tests to run
+	completed int // number of tests finished so far
 }
 
-func NewLiveDisplay() *LiveDisplay {
+func NewLiveDisplay(total int) *LiveDisplay {
 	d := &LiveDisplay{
 		byName: make(map[string]int),
 		stopCh: make(chan struct{}),
+		total:  total,
 	}
 	if tty {
 		d.ticker = time.NewTicker(80 * time.Millisecond)
@@ -67,7 +70,7 @@ func (d *LiveDisplay) Update(name, status string) {
 	if idx, ok := d.byName[name]; ok {
 		d.slots[idx].status = status
 		if !tty {
-			color.New(color.FgHiBlack).Fprintf(os.Stderr, "  [%s] %s\n", name, status)
+			color.New(color.FgHiBlack).Fprintf(os.Stderr, "  [%d/%d] [%s] %s\n", d.completed, d.total, name, status)
 		}
 	}
 }
@@ -78,6 +81,7 @@ func (d *LiveDisplay) FinishTest(name string, passed, cached, skipped bool, dur 
 	if idx, ok := d.byName[name]; ok {
 		s := d.slots[idx]
 		s.done, s.passed, s.cached, s.skipped, s.duration = true, passed, cached, skipped, dur
+		d.completed++
 	}
 	d.render()
 }
@@ -133,11 +137,17 @@ func (d *LiveDisplay) render() {
 
 func (d *LiveDisplay) slotLine(s *slotState) string {
 	if !s.done {
+		prefix := fmt.Sprintf("[%d/%d] ", d.completed, d.total)
+		nameWidth := 38 - len(prefix)
+		if nameWidth < 20 {
+			nameWidth = 20
+		}
 		spinner := color.New(color.FgCyan).Sprint(spinnerFrames[s.frame])
 		status := truncateStatus(s.status, 52)
-		return fmt.Sprintf("  %s %s  %s",
+		return fmt.Sprintf("  %s%s %s  %s",
+			color.New(color.FgHiBlack).Sprint(prefix),
 			spinner,
-			color.New(color.FgHiBlack).Sprintf("%-38s", s.name),
+			color.New(color.FgHiBlack).Sprintf("%-*s", nameWidth, s.name),
 			color.New(color.FgHiBlack).Sprint(status),
 		)
 	}

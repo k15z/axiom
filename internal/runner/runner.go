@@ -47,8 +47,18 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// Pre-compute total number of tests that will run (after filter)
+	total := 0
+	for _, t := range tests {
+		if opts.Filter == "" {
+			total++
+		} else if matched, _ := filepath.Match(opts.Filter, t.Name); matched {
+			total++
+		}
+	}
+
 	// Live display — one spinner line per running test
-	live := display.NewLiveDisplay()
+	live := display.NewLiveDisplay(total)
 
 	// Pre-allocate results slice to preserve original test order
 	results := make([]types.TestResult, len(tests))
