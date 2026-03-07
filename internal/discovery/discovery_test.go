@@ -94,6 +94,23 @@ func TestDiscover_NonexistentDir(t *testing.T) {
 	}
 }
 
+func TestDiscover_DuplicateName(t *testing.T) {
+	dir := t.TempDir()
+	writeYAML(t, dir, "a.yml", `
+dup:
+  condition: "first definition"
+`)
+	writeYAML(t, dir, "b.yml", `
+dup:
+  condition: "second definition"
+`)
+
+	_, err := Discover(dir)
+	if err == nil {
+		t.Fatal("expected error for duplicate test name")
+	}
+}
+
 func TestDiscover_OnField(t *testing.T) {
 	dir := t.TempDir()
 	writeYAML(t, dir, "with_on.yml", `

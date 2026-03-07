@@ -52,6 +52,7 @@ func Discover(testDir string) ([]Test, error) {
 	sort.Strings(files)
 
 	var tests []Test
+	seen := make(map[string]string) // name -> source file
 	for _, file := range files {
 		path := filepath.Join(testDir, file)
 		data, err := os.ReadFile(path)
@@ -84,6 +85,11 @@ func Discover(testDir string) ([]Test, error) {
 			if def.Condition == "" {
 				return nil, fmt.Errorf("test %q in %s: condition is required", keyNode.Value, path)
 			}
+
+			if prev, ok := seen[keyNode.Value]; ok {
+				return nil, fmt.Errorf("duplicate test name %q: defined in %s and %s", keyNode.Value, prev, file)
+			}
+			seen[keyNode.Value] = file
 
 			tests = append(tests, Test{
 				Name:       keyNode.Value,
