@@ -10,10 +10,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/anthropics/anthropic-sdk-go/option"
-	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
 	"github.com/k15z/axiom/internal/agent"
+	"github.com/k15z/axiom/internal/provider"
 )
 
 const initSystemPrompt = `You are exploring a codebase to generate behavioral tests for axiom, an AI-driven test framework that verifies code intent.
@@ -152,56 +150,61 @@ func DetectContext(root string) string {
 }
 
 // GenerateTests uses the LLM to explore the codebase and generate test YAML.
-func GenerateTests(ctx context.Context, apiKey, model, repoRoot string, progress ProgressFunc) (string, error) {
+func GenerateTests(ctx context.Context, p provider.Provider, model, repoRoot string, progress ProgressFunc) (string, error) {
 	if progress == nil {
 		progress = func(string) {}
 	}
 
-	client := anthropic.NewClient(option.WithAPIKey(apiKey))
 	tools := agent.ToolDefs()
 
 	projectContext := DetectContext(repoRoot)
 	userMsg := fmt.Sprintf("Explore this codebase and generate behavioral tests.\n\nProject context:\n%s", projectContext)
 
-	messages := []anthropic.MessageParam{
-		anthropic.NewUserMessage(anthropic.NewTextBlock(userMsg)),
-	}
-
-	params := anthropic.MessageNewParams{
-		Model:     anthropic.Model(model),
-		MaxTokens: int64(16000),
-		System:    []anthropic.TextBlockParam{{Text: initSystemPrompt}},
-		Tools:     tools,
+	messages := []provider.Message{
+		{Role: "user", Content: []provider.ContentBlock{{Type: "text", Text: userMsg}}},
 	}
 
 	maxIterations := 20
 	for i := 0; i < maxIterations; i++ {
 		progress(fmt.Sprintf("thinking (turn %d/%d)", i+1, maxIterations))
 
-		params.Messages = messages
-		resp, err := consumeStream(client.Messages.NewStreaming(ctx, params))
+		resp, err := p.Chat(ctx, provider.ChatParams{
+			Model:     model,
+			System:    initSystemPrompt,
+			Messages:  messages,
+			Tools:     tools,
+			MaxTokens: 16000,
+		})
 		if err != nil {
 			return "", fmt.Errorf("API call failed: %w", err)
 		}
 
-		var toolResults []anthropic.ContentBlockParamUnion
+		var toolResults []provider.ContentBlock
+		var assistantBlocks []provider.ContentBlock
 		var finalText strings.Builder
 
 		for _, block := range resp.Content {
-			switch v := block.AsAny().(type) {
-			case anthropic.ToolUseBlock:
-				summary := formatToolCall(v.Name, v.Input)
+			assistantBlocks = append(assistantBlocks, block)
+			switch block.Type {
+			case "tool_use":
+				summary := formatToolCall(block.ToolName, block.Input)
 				progress(summary)
-				result, isError := agent.ExecuteTool(ctx, v.Name, v.Input, repoRoot, 0)
-				toolResults = append(toolResults, anthropic.NewToolResultBlock(v.ID, result, isError))
-			case anthropic.TextBlock:
-				finalText.WriteString(v.Text)
+				result, isError := agent.ExecuteTool(ctx, block.ToolName, block.Input, repoRoot, 0)
+				toolResults = append(toolResults, provider.ContentBlock{
+					Type:     "tool_result",
+					ToolID:   block.ToolID,
+					ToolName: block.ToolName,
+					Text:     result,
+					IsError:  isError,
+				})
+			case "text":
+				finalText.WriteString(block.Text)
 			}
 		}
 
 		if len(toolResults) > 0 {
-			messages = append(messages, resp.ToParam())
-			messages = append(messages, anthropic.NewUserMessage(toolResults...))
+			messages = append(messages, provider.Message{Role: "assistant", Content: assistantBlocks})
+			messages = append(messages, provider.Message{Role: "user", Content: toolResults})
 			continue
 		}
 
@@ -224,21 +227,6 @@ func extractYAML(text string) string {
 		return ""
 	}
 	return strings.TrimSpace(m[1])
-}
-
-// consumeStream reads all events from a streaming response and returns the accumulated Message.
-func consumeStream(stream *ssestream.Stream[anthropic.MessageStreamEventUnion]) (*anthropic.Message, error) {
-	defer stream.Close()
-	var msg anthropic.Message
-	for stream.Next() {
-		if err := msg.Accumulate(stream.Current()); err != nil {
-			return nil, fmt.Errorf("stream accumulate: %w", err)
-		}
-	}
-	if err := stream.Err(); err != nil {
-		return nil, err
-	}
-	return &msg, nil
 }
 
 func formatToolCall(name string, input json.RawMessage) string {

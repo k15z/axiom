@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/k15z/axiom/internal/provider"
 	"gopkg.in/yaml.v3"
 )
 
@@ -21,11 +22,13 @@ type AgentConfig struct {
 }
 
 type Config struct {
-	Model   string      `yaml:"model"`
-	TestDir string      `yaml:"test_dir"`
-	Cache   CacheConfig `yaml:"cache"`
-	Agent   AgentConfig `yaml:"agent"`
-	APIKey  string      `yaml:"-"`
+	Model    string      `yaml:"model"`
+	Provider string      `yaml:"provider"` // "anthropic", "openai", "gemini" (inferred from model if omitted)
+	BaseURL  string      `yaml:"base_url"` // custom API endpoint for OpenAI-compatible providers
+	TestDir  string      `yaml:"test_dir"`
+	Cache    CacheConfig `yaml:"cache"`
+	Agent    AgentConfig `yaml:"agent"`
+	APIKey   string      `yaml:"-"`
 }
 
 func Default() Config {
@@ -92,9 +95,21 @@ func load(testDir string, requireKey bool) (Config, error) {
 		cfg.TestDir = testDir
 	}
 
-	cfg.APIKey = os.Getenv("ANTHROPIC_API_KEY")
-	if cfg.APIKey == "" && requireKey {
-		return cfg, fmt.Errorf("ANTHROPIC_API_KEY is not set (set it in the environment or a .env file)")
+	if !requireKey {
+		return cfg, nil
+	}
+
+	// Resolve provider from explicit setting or model name
+	resolved, err := provider.ResolveProvider(cfg.Provider, cfg.Model)
+	if err != nil {
+		return cfg, err
+	}
+	cfg.Provider = resolved
+
+	// Load the appropriate API key for the resolved provider
+	cfg.APIKey, err = loadAPIKeyForProvider(resolved)
+	if err != nil {
+		return cfg, err
 	}
 
 	return cfg, nil
@@ -143,6 +158,26 @@ func LoadAPIKey() (string, error) {
 	key := os.Getenv("ANTHROPIC_API_KEY")
 	if key == "" {
 		return "", fmt.Errorf("ANTHROPIC_API_KEY is not set (set it in the environment or a .env file)")
+	}
+	return key, nil
+}
+
+// loadAPIKeyForProvider returns the API key for the given provider.
+func loadAPIKeyForProvider(prov string) (string, error) {
+	var envVar string
+	switch prov {
+	case "anthropic":
+		envVar = "ANTHROPIC_API_KEY"
+	case "openai":
+		envVar = "OPENAI_API_KEY"
+	case "gemini":
+		envVar = "GEMINI_API_KEY"
+	default:
+		return "", fmt.Errorf("unknown provider %q", prov)
+	}
+	key := os.Getenv(envVar)
+	if key == "" {
+		return "", fmt.Errorf("%s is not set (set it in the environment or a .env file)", envVar)
 	}
 	return key, nil
 }

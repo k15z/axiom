@@ -9,6 +9,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/k15z/axiom/internal/config"
+	"github.com/k15z/axiom/internal/provider"
 	"github.com/k15z/axiom/internal/scaffold"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -35,7 +36,7 @@ intent, security invariants, and design constraints.`,
 				return fmt.Errorf("%s already exists — remove it first to re-initialize", dir)
 			}
 
-			// Load API key
+			// Load API key (init always uses Anthropic for now)
 			apiKey, err := config.LoadAPIKey()
 			if err != nil {
 				return err
@@ -43,6 +44,7 @@ intent, security invariants, and design constraints.`,
 
 			model := "claude-haiku-4-5-20251001"
 			repoRoot, _ := filepath.Abs(".")
+			var p provider.Provider = provider.NewAnthropic(apiKey, nil)
 
 			// Progress display
 			tty := isatty.IsTerminal(os.Stderr.Fd())
@@ -51,7 +53,7 @@ intent, security invariants, and design constraints.`,
 
 			yamlContent, err := scaffold.GenerateTests(
 				context.Background(),
-				apiKey, model, repoRoot,
+				p, model, repoRoot,
 				func(msg string) {
 					spin.update(msg)
 				},

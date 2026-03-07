@@ -7,9 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/anthropics/anthropic-sdk-go/option"
-	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
+	"github.com/k15z/axiom/internal/provider"
 )
 
 type Usage struct {
@@ -73,7 +71,7 @@ type RunOptions struct {
 	ToolTimeout   time.Duration // per-tool timeout; 0 means no timeout
 }
 
-func Run(ctx context.Context, apiKey string, model string, condition string, onGlobs []string, repoRoot string, progress ProgressFunc, opts RunOptions) (Result, error) {
+func Run(ctx context.Context, p provider.Provider, model string, condition string, onGlobs []string, repoRoot string, progress ProgressFunc, opts RunOptions) (Result, error) {
 	if progress == nil {
 		progress = func(Event) {}
 	}
@@ -83,8 +81,6 @@ func Run(ctx context.Context, apiKey string, model string, condition string, onG
 	if opts.MaxTokens <= 0 {
 		opts.MaxTokens = 10000
 	}
-
-	client := anthropic.NewClient(option.WithAPIKey(apiKey))
 
 	var userMsg strings.Builder
 	userMsg.WriteString("Condition: ")
@@ -99,63 +95,79 @@ func Run(ctx context.Context, apiKey string, model string, condition string, onG
 		}
 	}
 
-	messages := []anthropic.MessageParam{
-		anthropic.NewUserMessage(anthropic.NewTextBlock(userMsg.String())),
+	messages := []provider.Message{
+		{Role: "user", Content: []provider.ContentBlock{{Type: "text", Text: userMsg.String()}}},
 	}
 	tools := ToolDefs()
 
 	var usage Usage
-
-	params := anthropic.MessageNewParams{
-		Model:     anthropic.Model(model),
-		MaxTokens: int64(opts.MaxTokens),
-		System:    []anthropic.TextBlockParam{{Text: systemPrompt}},
-		Tools:     tools,
-	}
-
 	budgetHintInjected := false
 
 	maxIterations := opts.MaxIterations
 	for i := 0; i < maxIterations; i++ {
 		progress(Event{Kind: "thinking", Message: fmt.Sprintf("thinking (turn %d/%d)", i+1, maxIterations)})
 
-		params.Messages = messages
-		resp, err := streamWithRetry(ctx, client, params, progress)
+		resp, err := p.Chat(ctx, provider.ChatParams{
+			Model:     model,
+			System:    systemPrompt,
+			Messages:  messages,
+			Tools:     tools,
+			MaxTokens: opts.MaxTokens,
+		})
 		if err != nil {
 			return Result{Usage: usage}, fmt.Errorf("API call failed: %w", err)
 		}
 
 		usage.APICalls++
-		usage.InputTokens += int(resp.Usage.InputTokens)
-		usage.OutputTokens += int(resp.Usage.OutputTokens)
+		usage.InputTokens += resp.Usage.InputTokens
+		usage.OutputTokens += resp.Usage.OutputTokens
 
-		var toolResults []anthropic.ContentBlockParamUnion
+		var toolResults []provider.ContentBlock
 		var finalText strings.Builder
 
+		// Build the assistant message for conversation history
+		var assistantBlocks []provider.ContentBlock
+
 		for _, block := range resp.Content {
-			switch v := block.AsAny().(type) {
-			case anthropic.ToolUseBlock:
-				summary := formatToolCall(v.Name, v.Input)
+			assistantBlocks = append(assistantBlocks, block)
+			switch block.Type {
+			case "tool_use":
+				summary := formatToolCall(block.ToolName, block.Input)
 				progress(Event{Kind: "tool_call", Message: summary})
-				result, isError := ExecuteTool(ctx, v.Name, v.Input, repoRoot, opts.ToolTimeout)
-				toolResults = append(toolResults, anthropic.NewToolResultBlock(v.ID, result, isError))
-			case anthropic.TextBlock:
-				finalText.WriteString(v.Text)
+				result, isError := ExecuteTool(ctx, block.ToolName, block.Input, repoRoot, opts.ToolTimeout)
+				toolResults = append(toolResults, provider.ContentBlock{
+					Type:     "tool_result",
+					ToolID:   block.ToolID,
+					ToolName: block.ToolName,
+					Text:     result,
+					IsError:  isError,
+				})
+			case "text":
+				progress(Event{Kind: "text", Message: block.Text})
+				finalText.WriteString(block.Text)
 			}
 		}
 
 		if len(toolResults) > 0 {
-			messages = append(messages, resp.ToParam())
+			messages = append(messages, provider.Message{
+				Role:    "assistant",
+				Content: assistantBlocks,
+			})
 
 			// Inject a budget hint when the agent has used >=75% of its
-			// total token budget and is still making tool calls. This
-			// nudges the model to conclude rather than hard-cutting.
+			// total token budget and is still making tool calls.
 			if !budgetHintInjected && shouldInjectBudgetHint(usage.InputTokens, usage.OutputTokens, opts.MaxTokens) {
 				budgetHintInjected = true
-				toolResults = append(toolResults, anthropic.NewTextBlock(tokenBudgetHint))
+				toolResults = append(toolResults, provider.ContentBlock{
+					Type: "text",
+					Text: tokenBudgetHint,
+				})
 			}
 
-			messages = append(messages, anthropic.NewUserMessage(toolResults...))
+			messages = append(messages, provider.Message{
+				Role:    "user",
+				Content: toolResults,
+			})
 			continue
 		}
 
@@ -169,54 +181,6 @@ func Run(ctx context.Context, apiKey string, model string, condition string, onG
 		Reasoning: "Agent exceeded maximum iterations without reaching a verdict",
 		Usage:     usage,
 	}, nil
-}
-
-// consumeStream reads all events from a streaming response, emitting text events
-// for real-time reasoning display, and returns the fully accumulated Message.
-func consumeStream(stream *ssestream.Stream[anthropic.MessageStreamEventUnion], progress ProgressFunc) (*anthropic.Message, error) {
-	defer stream.Close()
-
-	var msg anthropic.Message
-	for stream.Next() {
-		event := stream.Current()
-		if err := msg.Accumulate(event); err != nil {
-			return nil, fmt.Errorf("stream accumulate: %w", err)
-		}
-		// Emit streamed text deltas so the display can show live reasoning
-		if delta, ok := event.AsAny().(anthropic.ContentBlockDeltaEvent); ok {
-			if td, ok := delta.Delta.AsAny().(anthropic.TextDelta); ok && td.Text != "" {
-				progress(Event{Kind: "text", Message: td.Text})
-			}
-		}
-	}
-	if err := stream.Err(); err != nil {
-		return nil, err
-	}
-	return &msg, nil
-}
-
-// streamWithRetry opens a streaming API call with retry on 429 rate limit errors.
-func streamWithRetry(ctx context.Context, client anthropic.Client, params anthropic.MessageNewParams, progress ProgressFunc) (*anthropic.Message, error) {
-	delays := []time.Duration{5 * time.Second, 15 * time.Second, 30 * time.Second, 60 * time.Second}
-	for attempt, maxAttempts := 0, len(delays)+1; attempt < maxAttempts; attempt++ {
-		stream := client.Messages.NewStreaming(ctx, params)
-		msg, err := consumeStream(stream, progress)
-		if err == nil {
-			return msg, nil
-		}
-		errStr := err.Error()
-		isRateLimit := strings.Contains(errStr, "429") || strings.Contains(errStr, "rate_limit_error")
-		if !isRateLimit || attempt == maxAttempts-1 {
-			return nil, err
-		}
-		delay := delays[attempt]
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(delay):
-		}
-	}
-	return nil, fmt.Errorf("unreachable")
 }
 
 // formatToolCall produces a readable summary like: grep("UPDATE.*WHERE status")

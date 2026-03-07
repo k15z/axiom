@@ -12,19 +12,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/k15z/axiom/internal/glob"
+	"github.com/k15z/axiom/internal/provider"
 )
 
 const maxOutputBytes = 100_000 // truncate tool output beyond this
 
-// ToolDefs returns the tool definitions for the agent.
-func ToolDefs() []anthropic.ToolUnionParam {
-	return []anthropic.ToolUnionParam{
-		{OfTool: &anthropic.ToolParam{
+// ToolDefs returns provider-agnostic tool definitions for the agent.
+func ToolDefs() []provider.Tool {
+	return []provider.Tool{
+		{
 			Name:        "read_file",
-			Description: anthropic.String("Read the contents of a file. Returns the file contents with line numbers. Use start_line/end_line to read a specific range instead of the whole file."),
-			InputSchema: jsonSchema(map[string]any{
+			Description: "Read the contents of a file. Returns the file contents with line numbers. Use start_line/end_line to read a specific range instead of the whole file.",
+			InputSchema: rawSchema(map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"path": map[string]any{
@@ -42,11 +42,11 @@ func ToolDefs() []anthropic.ToolUnionParam {
 				},
 				"required": []string{"path"},
 			}),
-		}},
-		{OfTool: &anthropic.ToolParam{
+		},
+		{
 			Name:        "glob",
-			Description: anthropic.String("Find files matching a glob pattern. Returns a list of matching file paths. Supports ** for recursive matching."),
-			InputSchema: jsonSchema(map[string]any{
+			Description: "Find files matching a glob pattern. Returns a list of matching file paths. Supports ** for recursive matching.",
+			InputSchema: rawSchema(map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"pattern": map[string]any{
@@ -56,11 +56,11 @@ func ToolDefs() []anthropic.ToolUnionParam {
 				},
 				"required": []string{"pattern"},
 			}),
-		}},
-		{OfTool: &anthropic.ToolParam{
+		},
+		{
 			Name:        "grep",
-			Description: anthropic.String("Search file contents using a regex pattern. Returns matching lines with file paths and line numbers."),
-			InputSchema: jsonSchema(map[string]any{
+			Description: "Search file contents using a regex pattern. Returns matching lines with file paths and line numbers.",
+			InputSchema: rawSchema(map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"pattern": map[string]any{
@@ -74,11 +74,11 @@ func ToolDefs() []anthropic.ToolUnionParam {
 				},
 				"required": []string{"pattern"},
 			}),
-		}},
-		{OfTool: &anthropic.ToolParam{
+		},
+		{
 			Name:        "list_dir",
-			Description: anthropic.String("List the contents of a directory. Returns file and directory names."),
-			InputSchema: jsonSchema(map[string]any{
+			Description: "List the contents of a directory. Returns file and directory names.",
+			InputSchema: rawSchema(map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"path": map[string]any{
@@ -88,11 +88,11 @@ func ToolDefs() []anthropic.ToolUnionParam {
 				},
 				"required": []string{"path"},
 			}),
-		}},
-		{OfTool: &anthropic.ToolParam{
+		},
+		{
 			Name:        "tree",
-			Description: anthropic.String("Recursively list a directory tree with depth limit. Returns an indented tree of files and directories, useful for understanding project structure."),
-			InputSchema: jsonSchema(map[string]any{
+			Description: "Recursively list a directory tree with depth limit. Returns an indented tree of files and directories, useful for understanding project structure.",
+			InputSchema: rawSchema(map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"path": map[string]any{
@@ -106,15 +106,13 @@ func ToolDefs() []anthropic.ToolUnionParam {
 				},
 				"required": []string{"path"},
 			}),
-		}},
+		},
 	}
 }
 
-func jsonSchema(v any) anthropic.ToolInputSchemaParam {
+func rawSchema(v any) json.RawMessage {
 	raw, _ := json.Marshal(v)
-	var schema anthropic.ToolInputSchemaParam
-	json.Unmarshal(raw, &schema)
-	return schema
+	return raw
 }
 
 // ExecuteTool dispatches a tool call and returns the result string.

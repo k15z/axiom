@@ -10,6 +10,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/k15z/axiom/internal/config"
+	"github.com/k15z/axiom/internal/provider"
 	"github.com/k15z/axiom/internal/scaffold"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -57,9 +58,19 @@ Examples:
 			spin := newSpinner(tty, "exploring codebase…")
 			spin.start()
 
+			var p provider.Provider
+			switch cfg.Provider {
+			case "openai":
+				p = provider.NewOpenAI(cfg.APIKey, cfg.BaseURL)
+			case "gemini":
+				p = provider.NewGemini(cfg.APIKey)
+			default:
+				p = provider.NewAnthropic(cfg.APIKey, nil)
+			}
+
 			yamlContent, err := scaffold.GenerateTest(
 				context.Background(),
-				cfg.APIKey, model, repoRoot, intent,
+				p, model, repoRoot, intent,
 				func(msg string) {
 					spin.update(msg)
 				},

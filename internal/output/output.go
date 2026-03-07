@@ -234,14 +234,28 @@ func printReasoning(reasoning, indent string) {
 func estimateCost(model string, inputTokens, outputTokens int) float64 {
 	type pricing struct{ input, output float64 }
 
-	// https://docs.anthropic.com/en/docs/about-claude/models
+	// Anthropic: https://docs.anthropic.com/en/docs/about-claude/models
+	// OpenAI: https://openai.com/api/pricing/
+	// Gemini: https://ai.google.dev/pricing
 	prices := map[string]pricing{
-		"claude-haiku-4-5":          {1.00, 5.00},
-		"claude-haiku-4-5-20251001": {1.00, 5.00},
-		"claude-sonnet-4-5":         {3.00, 15.00},
+		// Anthropic
+		"claude-haiku-4-5":           {1.00, 5.00},
+		"claude-haiku-4-5-20251001":  {1.00, 5.00},
+		"claude-sonnet-4-5":          {3.00, 15.00},
 		"claude-sonnet-4-5-20250514": {3.00, 15.00},
-		"claude-sonnet-4-6":         {3.00, 15.00},
-		"claude-opus-4-6":           {15.00, 75.00},
+		"claude-sonnet-4-6":          {3.00, 15.00},
+		"claude-opus-4-6":            {15.00, 75.00},
+		// OpenAI
+		"gpt-4o":      {2.50, 10.00},
+		"gpt-4o-mini": {0.15, 0.60},
+		"gpt-4.1":     {2.00, 8.00},
+		"gpt-4.1-mini": {0.40, 1.60},
+		"gpt-4.1-nano": {0.10, 0.40},
+		"o3-mini":     {1.10, 4.40},
+		// Gemini
+		"gemini-2.0-flash":  {0.10, 0.40},
+		"gemini-1.5-pro":    {1.25, 5.00},
+		"gemini-1.5-flash":  {0.075, 0.30},
 	}
 
 	p, ok := prices[model]

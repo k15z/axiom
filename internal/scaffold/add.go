@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/k15z/axiom/internal/agent"
+	"github.com/k15z/axiom/internal/provider"
 )
 
 const addSystemPrompt = `You are exploring a codebase to generate a single behavioral test for axiom, an AI-driven test framework that verifies code intent.
@@ -35,54 +34,61 @@ The "condition" field should be a plain-English assertion that an AI agent can v
 Make the condition specific and grounded in what you actually find in the codebase.`
 
 // GenerateTest uses the LLM to explore the codebase and generate a single test from a natural-language intent.
-func GenerateTest(ctx context.Context, apiKey, model, repoRoot, intent string, progress ProgressFunc) (string, error) {
+func GenerateTest(ctx context.Context, p provider.Provider, model, repoRoot, intent string, progress ProgressFunc) (string, error) {
 	if progress == nil {
 		progress = func(string) {}
 	}
 
-	client := anthropic.NewClient(option.WithAPIKey(apiKey))
 	tools := agent.ToolDefs()
 
 	projectContext := DetectContext(repoRoot)
 	userMsg := fmt.Sprintf("Generate a behavioral test for the following intent:\n\n%s\n\nProject context:\n%s", intent, projectContext)
 
-	messages := []anthropic.MessageParam{
-		anthropic.NewUserMessage(anthropic.NewTextBlock(userMsg)),
+	messages := []provider.Message{
+		{Role: "user", Content: []provider.ContentBlock{{Type: "text", Text: userMsg}}},
 	}
 
 	maxIterations := 20
 	for i := 0; i < maxIterations; i++ {
 		progress(fmt.Sprintf("thinking (turn %d/%d)", i+1, maxIterations))
 
-		resp, err := client.Messages.New(ctx, anthropic.MessageNewParams{
-			Model:     anthropic.Model(model),
-			MaxTokens: int64(16000),
-			System:    []anthropic.TextBlockParam{{Text: addSystemPrompt}},
+		resp, err := p.Chat(ctx, provider.ChatParams{
+			Model:     model,
+			System:    addSystemPrompt,
 			Messages:  messages,
 			Tools:     tools,
+			MaxTokens: 16000,
 		})
 		if err != nil {
 			return "", fmt.Errorf("API call failed: %w", err)
 		}
 
-		var toolResults []anthropic.ContentBlockParamUnion
+		var toolResults []provider.ContentBlock
+		var assistantBlocks []provider.ContentBlock
 		var finalText strings.Builder
 
 		for _, block := range resp.Content {
-			switch v := block.AsAny().(type) {
-			case anthropic.ToolUseBlock:
-				summary := formatToolCall(v.Name, v.Input)
+			assistantBlocks = append(assistantBlocks, block)
+			switch block.Type {
+			case "tool_use":
+				summary := formatToolCall(block.ToolName, block.Input)
 				progress(summary)
-				result, isError := agent.ExecuteTool(ctx, v.Name, v.Input, repoRoot, 0)
-				toolResults = append(toolResults, anthropic.NewToolResultBlock(v.ID, result, isError))
-			case anthropic.TextBlock:
-				finalText.WriteString(v.Text)
+				result, isError := agent.ExecuteTool(ctx, block.ToolName, block.Input, repoRoot, 0)
+				toolResults = append(toolResults, provider.ContentBlock{
+					Type:     "tool_result",
+					ToolID:   block.ToolID,
+					ToolName: block.ToolName,
+					Text:     result,
+					IsError:  isError,
+				})
+			case "text":
+				finalText.WriteString(block.Text)
 			}
 		}
 
 		if len(toolResults) > 0 {
-			messages = append(messages, resp.ToParam())
-			messages = append(messages, anthropic.NewUserMessage(toolResults...))
+			messages = append(messages, provider.Message{Role: "assistant", Content: assistantBlocks})
+			messages = append(messages, provider.Message{Role: "user", Content: toolResults})
 			continue
 		}
 

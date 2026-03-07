@@ -14,6 +14,7 @@ import (
 	"github.com/k15z/axiom/internal/config"
 	"github.com/k15z/axiom/internal/discovery"
 	"github.com/k15z/axiom/internal/display"
+	"github.com/k15z/axiom/internal/provider"
 	"github.com/k15z/axiom/internal/types"
 )
 
@@ -40,6 +41,19 @@ func MatchesTag(t discovery.Test, tagFilter string) bool {
 		}
 	}
 	return false
+}
+
+// newProvider creates the appropriate LLM provider for the given config.
+// The progress callback is used for streaming text deltas (Anthropic only).
+func newProvider(cfg config.Config, progress provider.ProgressFunc) provider.Provider {
+	switch cfg.Provider {
+	case "openai":
+		return provider.NewOpenAI(cfg.APIKey, cfg.BaseURL)
+	case "gemini":
+		return provider.NewGemini(cfg.APIKey)
+	default:
+		return provider.NewAnthropic(cfg.APIKey, progress)
+	}
 }
 
 func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Options) ([]types.TestResult, error) {
@@ -187,7 +201,16 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 				defer timeoutCancel()
 			}
 
-			result, err := agent.Run(runCtx, cfg.APIKey, testModel, t.Condition, t.On, repoRoot, progress, agent.RunOptions{
+			// Create provider per-test so streaming progress is routed correctly
+			var textProgress provider.ProgressFunc
+			if cfg.Provider == "" || cfg.Provider == "anthropic" {
+				textProgress = func(text string) {
+					progress(agent.Event{Kind: "text", Message: text})
+				}
+			}
+			p := newProvider(cfg, textProgress)
+
+			result, err := agent.Run(runCtx, p, testModel, t.Condition, t.On, repoRoot, progress, agent.RunOptions{
 				MaxIterations: testMaxIter,
 				MaxTokens:     cfg.Agent.MaxTokens,
 				ToolTimeout:   time.Duration(cfg.Agent.ToolTimeout) * time.Second,
@@ -217,7 +240,7 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 					default:
 					}
 					live.Update(t.Name, fmt.Sprintf("retrying (%d/%d)…", retry, opts.Retries))
-					retryResult, retryErr := agent.Run(runCtx, cfg.APIKey, testModel, t.Condition, t.On, repoRoot, progress, agent.RunOptions{
+					retryResult, retryErr := agent.Run(runCtx, p, testModel, t.Condition, t.On, repoRoot, progress, agent.RunOptions{
 						MaxIterations: testMaxIter,
 						MaxTokens:     cfg.Agent.MaxTokens,
 						ToolTimeout:   time.Duration(cfg.Agent.ToolTimeout) * time.Second,
