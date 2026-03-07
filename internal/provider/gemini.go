@@ -228,7 +228,7 @@ func (p *GeminiProvider) doRequest(ctx context.Context, model string, req gemini
 		return nil, fmt.Errorf("marshaling request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", geminiBaseURL, model, p.apiKey)
+	url := fmt.Sprintf("%s/models/%s:generateContent", geminiBaseURL, model)
 
 	delays := []time.Duration{5 * time.Second, 15 * time.Second, 30 * time.Second, 60 * time.Second}
 	for attempt, maxAttempts := 0, len(delays)+1; attempt < maxAttempts; attempt++ {
@@ -237,6 +237,7 @@ func (p *GeminiProvider) doRequest(ctx context.Context, model string, req gemini
 			return nil, err
 		}
 		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("x-goog-api-key", p.apiKey)
 
 		resp, err := p.client.Do(httpReq)
 		if err != nil {

@@ -2,19 +2,52 @@
 
 ## Common Issues
 
-### "ANTHROPIC_API_KEY is not set"
+### "API key is not set"
 
-Axiom requires an Anthropic API key. Set it via:
+Axiom requires an API key for your configured provider. The key name depends on which provider you're using:
+
+**For Anthropic (default):**
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+**For OpenAI:**
+```bash
+export OPENAI_API_KEY=sk-...
+```
+
+**For Gemini:**
+```bash
+export GEMINI_API_KEY=AIza...
+```
+
+**For OpenAI-compatible (Ollama, vLLM):**
+```bash
+export OPENAI_API_KEY=not-needed  # or any non-empty value
+```
+
+You can also set these in a `.env` file:
 
 ```bash
-# Option 1: environment variable
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# Option 2: .env file in project root
 echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
 ```
 
 If using `.env`, make sure it's in the project root (where you run `axiom`).
+
+### "Provider is not set and cannot be inferred from model"
+
+Make sure your model name includes a provider prefix:
+- Anthropic: `claude-opus-4-6`, `claude-sonnet-4-6`, etc.
+- OpenAI: `gpt-4o`, `gpt-4-turbo`, etc.
+- Gemini: `gemini-2.0-flash`, `gemini-1.5-pro`, etc.
+
+Or set the provider explicitly in `axiom.yml`:
+```yaml
+provider: openai
+model: gpt-4o
+```
+
+See [Configuration](./configuration.md#multi-provider-support) for provider setup details.
 
 ### "test directory not found"
 

@@ -26,6 +26,7 @@ If a test name is provided as a positional argument, only that test runs. This o
 | `--concurrency` | `-c` | `0` (auto) | Number of tests to run in parallel |
 | `--retries` | | `0` | Re-run failed tests up to N times; if a retry passes, mark as flaky |
 | `--dry-run` | | `false` | Preview which tests would run and estimate token cost |
+| `--watch` | `-w` | `false` | Watch for file changes and re-run affected tests |
 
 ### Examples
 
@@ -59,6 +60,9 @@ axiom run --retries 1
 
 # Use a more capable model for this run
 axiom run --model claude-sonnet-4-6
+
+# Watch for file changes and re-run affected tests
+axiom run --watch
 ```
 
 ### Exit Codes
@@ -77,7 +81,7 @@ Analyze the codebase and generate behavioral tests.
 axiom init
 ```
 
-Requires `ANTHROPIC_API_KEY`. Creates `.axiom/tests.yml` and `axiom.yml`. Fails if `.axiom/` already exists.
+Requires an API key for your configured provider. Creates `.axiom/tests.yml` and `axiom.yml`. Fails if `.axiom/` already exists.
 
 ## axiom add
 
