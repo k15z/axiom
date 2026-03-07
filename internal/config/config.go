@@ -85,6 +85,42 @@ func Load(testDir string) (Config, error) {
 	return cfg, nil
 }
 
+// LoadMinimal loads config from .env and axiom.yml without requiring
+// ANTHROPIC_API_KEY. Use this for commands that don't call the API (e.g.
+// validate, list).
+func LoadMinimal(testDir string) Config {
+	loadDotEnv()
+
+	cfg := Default()
+
+	if data, err := os.ReadFile("axiom.yml"); err == nil {
+		if err := yaml.Unmarshal(data, &cfg); err == nil {
+			d := Default()
+			if cfg.Model == "" {
+				cfg.Model = d.Model
+			}
+			if cfg.TestDir == "" {
+				cfg.TestDir = d.TestDir
+			}
+			if cfg.Cache.Dir == "" {
+				cfg.Cache.Dir = d.Cache.Dir
+			}
+			if cfg.Agent.MaxIterations == 0 {
+				cfg.Agent.MaxIterations = d.Agent.MaxIterations
+			}
+			if cfg.Agent.MaxTokens == 0 {
+				cfg.Agent.MaxTokens = d.Agent.MaxTokens
+			}
+		}
+	}
+
+	if testDir != "" {
+		cfg.TestDir = testDir
+	}
+
+	return cfg
+}
+
 // LoadAPIKey loads the API key from the environment or .env file.
 // Unlike Load(), it does not require axiom.yml to exist.
 func LoadAPIKey() (string, error) {
