@@ -122,6 +122,66 @@ func TestShouldSkip(t *testing.T) {
 	}
 }
 
+func TestPrevResultTracking(t *testing.T) {
+	c := New(t.TempDir(), "hash1")
+	hashes := map[string]string{"a.go": "abc123"}
+
+	// First update — no previous result
+	c.Update("test1", "pass", hashes, "all good")
+	entry, ok := c.GetEntry("test1")
+	if !ok {
+		t.Fatal("expected entry")
+	}
+	if entry.PrevResult != "" {
+		t.Errorf("first update PrevResult = %q, want empty", entry.PrevResult)
+	}
+
+	// Second update — previous result should be "pass"
+	c.Update("test1", "fail", hashes, "broke")
+	entry, _ = c.GetEntry("test1")
+	if entry.PrevResult != "pass" {
+		t.Errorf("PrevResult = %q, want %q", entry.PrevResult, "pass")
+	}
+	if entry.Result != "fail" {
+		t.Errorf("Result = %q, want %q", entry.Result, "fail")
+	}
+
+	// Third update — previous result should be "fail"
+	c.Update("test1", "pass", hashes, "fixed")
+	entry, _ = c.GetEntry("test1")
+	if entry.PrevResult != "fail" {
+		t.Errorf("PrevResult = %q, want %q", entry.PrevResult, "fail")
+	}
+}
+
+func TestIsFlaky(t *testing.T) {
+	c := New(t.TempDir(), "hash1")
+	hashes := map[string]string{"a.go": "abc123"}
+
+	// No entry — not flaky
+	if c.IsFlaky("test1") {
+		t.Error("expected not flaky for missing entry")
+	}
+
+	// First update — no prev result — not flaky
+	c.Update("test1", "pass", hashes, "")
+	if c.IsFlaky("test1") {
+		t.Error("expected not flaky after first run")
+	}
+
+	// Same result — not flaky
+	c.Update("test1", "pass", hashes, "")
+	if c.IsFlaky("test1") {
+		t.Error("expected not flaky when result unchanged")
+	}
+
+	// Different result — flaky
+	c.Update("test1", "fail", hashes, "")
+	if !c.IsFlaky("test1") {
+		t.Error("expected flaky when result flipped")
+	}
+}
+
 func TestHashConfig(t *testing.T) {
 	h1 := HashConfig("claude-haiku-4-5-20251001", 30, 10000)
 	h2 := HashConfig("claude-haiku-4-5-20251001", 30, 10000)
