@@ -5,7 +5,10 @@ This guide takes you from zero to running your first axiom test in under 5 minut
 ## Prerequisites
 
 - Go 1.21 or later
-- An Anthropic API key ([get one here](https://console.anthropic.com/))
+- An API key from a supported provider:
+  - [Anthropic](https://console.anthropic.com/) (default)
+  - [OpenAI](https://platform.openai.com/api-keys)
+  - [Google Gemini](https://aistudio.google.com/apikey)
 
 ## Install
 
@@ -110,9 +113,19 @@ axiom add "all API routes require authentication"
 
 Axiom explores your codebase, generates a test, and asks for confirmation before writing it.
 
+## Watch Mode
+
+Re-run affected tests automatically when source files change:
+
+```bash
+axiom run --watch
+```
+
+Axiom watches files matching your tests' `on` globs and re-runs only the affected tests when changes are detected. Press Ctrl+C to stop.
+
 ## Next Steps
 
 - [Writing Tests](./writing-tests.md) -- learn the YAML format and how to write effective conditions
 - [Examples](./examples.md) -- curated test examples across security, architecture, and code quality
-- [Configuration](./configuration.md) -- customize model, timeouts, and caching
+- [Configuration](./configuration.md) -- customize model, providers, timeouts, and caching
 - [CI Integration](./ci-integration.md) -- set up axiom in GitHub Actions

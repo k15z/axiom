@@ -38,7 +38,10 @@ test_no_sql_injection:
 - **YAML test definitions** with natural language conditions
 - **Content-hash caching** -- skip tests when trigger files haven't changed
 - **Parallel execution** with configurable concurrency
-- **CI-friendly** -- exit codes, JSON output, GitHub PR comment format
+- **Watch mode** (`--watch`) -- re-run affected tests when source files change
+- **Multi-provider support** -- Anthropic, OpenAI, Gemini, and OpenAI-compatible endpoints
+- **Agent memory** -- agent builds notes across runs, reducing token costs and speeding up subsequent runs
+- **CI-friendly** -- exit codes, JSON output, GitHub PR comment format, reusable GitHub Action
 - **Per-test overrides** for model, timeout, and iteration limits
 - **Tag-based filtering** to run subsets of tests
 - **Flaky test detection** with automatic retries

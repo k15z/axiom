@@ -2,9 +2,56 @@
 
 Axiom is designed to run in CI pipelines. This page covers GitHub Actions setup, cache persistence, and PR comment integration.
 
-## GitHub Actions
+## GitHub Action (Recommended)
 
-### Basic Setup
+The easiest way to run axiom in CI is with the reusable GitHub Action:
+
+```yaml
+# .github/workflows/axiom.yml
+name: Axiom Tests
+on: [pull_request]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  axiom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: k15z/axiom@main
+        with:
+          api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+This handles everything: installing axiom and Go, restoring/saving the cache, running tests, posting a PR comment with results, and failing the step if any tests fail.
+
+### Action Inputs
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `api_key` | *required* | API key for your provider |
+| `provider` | `anthropic` | LLM provider: `anthropic`, `openai`, or `gemini` |
+| `model` | | Override the model (uses `axiom.yml` default if omitted) |
+| `test_dir` | `.axiom/` | Path to test directory |
+| `go_version` | `1.21` | Go version to install |
+| `comment` | `true` | Post results as a PR comment |
+| `args` | | Extra arguments passed to `axiom run` |
+
+### Using with OpenAI or Gemini
+
+```yaml
+- uses: k15z/axiom@main
+  with:
+    api_key: ${{ secrets.OPENAI_API_KEY }}
+    provider: openai
+```
+
+## Manual Setup
+
+For more control or other CI systems, run axiom directly.
+
+### Basic Setup (Anthropic)
 
 ```yaml
 name: Axiom Tests
@@ -33,6 +80,32 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
+
+### Setup with OpenAI or Gemini
+
+To use OpenAI or Gemini instead, set the appropriate environment variable:
+
+```yaml
+      - name: Run axiom tests
+        run: axiom run --all
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
+
+And add `provider` and `model` to your `axiom.yml`:
+
+```yaml
+provider: openai
+model: gpt-4o
+```
+
+For Gemini, use:
+```yaml
+provider: gemini
+model: gemini-2.0-flash
+```
+
+See [Multi-Provider Support](./configuration.md#multi-provider-support) for details.
 
 ### With Cache Persistence
 

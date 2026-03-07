@@ -8,13 +8,21 @@ Place `axiom.yml` in your project root. All fields are optional -- defaults are 
 # LLM model to use (default: claude-haiku-4-5-20251001)
 model: claude-haiku-4-5-20251001
 
+# LLM provider: anthropic (default), openai, or gemini
+# If omitted, provider is inferred from the model name
+# provider: openai
+
+# Custom API endpoint for OpenAI-compatible providers (Ollama, vLLM, etc.)
+# Ignored unless provider is openai
+# base_url: http://localhost:11434/v1
+
 # Directory containing test YAML files (default: .axiom/)
 test_dir: .axiom/
 
 # Cache settings
 cache:
   enabled: true           # Set to false to disable caching entirely
-  dir: .axiom/.cache/     # Where cache files are stored
+  dir: .axiom/.cache/     # Where cache files are stored (includes notes.json for agent memory)
 
 # Agent settings
 agent:
@@ -29,6 +37,7 @@ agent:
 | Field | Default |
 |-------|---------|
 | `model` | `claude-haiku-4-5-20251001` |
+| `provider` | inferred from model name, or `anthropic` |
 | `test_dir` | `.axiom/` |
 | `cache.enabled` | `true` |
 | `cache.dir` | `.axiom/.cache/` |
@@ -62,14 +71,70 @@ test_complex_security_audit:
     ...
 ```
 
+## Multi-Provider Support
+
+Axiom supports Anthropic, OpenAI, and Gemini. The provider is auto-detected from the model name, or set explicitly in `axiom.yml`:
+
+### Anthropic (Default)
+
+```yaml
+model: claude-opus-4-6
+# Provider is inferred from model name
+```
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### OpenAI
+
+```yaml
+provider: openai
+model: gpt-4o
+```
+
+```bash
+export OPENAI_API_KEY=sk-...
+```
+
+### Gemini
+
+```yaml
+provider: gemini
+model: gemini-2.0-flash
+```
+
+```bash
+export GEMINI_API_KEY=AIza...
+```
+
+### OpenAI-Compatible (Ollama, vLLM, etc.)
+
+```yaml
+provider: openai
+model: llama3        # or any model name
+base_url: http://localhost:11434/v1
+```
+
+```bash
+export OPENAI_API_KEY=not-needed  # or set to any non-empty value
+```
+
 ## API Key
 
-Set `ANTHROPIC_API_KEY` in one of two ways:
+Set the API key for your provider in one of two ways:
 
 ### Environment Variable
 
 ```bash
+# For Anthropic (default)
 export ANTHROPIC_API_KEY=sk-ant-...
+
+# For OpenAI
+export OPENAI_API_KEY=sk-...
+
+# For Gemini
+export GEMINI_API_KEY=AIza...
 ```
 
 ### .env File
@@ -77,7 +142,14 @@ export ANTHROPIC_API_KEY=sk-ant-...
 Create a `.env` file in your project root:
 
 ```
-ANTHROPIC_API_KEY=sk-ant-api03-...
+# For Anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+
+# For OpenAI
+OPENAI_API_KEY=sk-...
+
+# For Gemini
+GEMINI_API_KEY=AIza...
 ```
 
 Axiom loads `.env` automatically. Existing environment variables take precedence over `.env` values. Supports both quoted and unquoted values.
@@ -127,3 +199,16 @@ axiom cache clear
 ### Config-Aware Invalidation
 
 Changing `model`, `max_iterations`, or `max_tokens` in `axiom.yml` automatically invalidates cached results, since different settings may produce different verdicts.
+
+## Agent Memory
+
+Axiom's agent builds notes about your codebase across runs. These notes are stored in `.axiom/.cache/notes.json` and include:
+
+- **Codebase-level observations** — architecture patterns, common conventions, package structure
+- **Per-test observations** — file locations, function signatures, implementation details relevant to specific tests
+
+On subsequent runs, the agent skips redundant exploration and goes straight to checking what changed. Notes are automatically invalidated when referenced files change, so you always get fresh analysis when code updates.
+
+This dramatically reduces token usage for repeated tests and improves test speed over time.
+
+**Location:** `.axiom/.cache/notes.json` (included in cache, safe to gitignore)

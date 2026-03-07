@@ -15,18 +15,24 @@ go run ./cmd/axiom/ run --all  # Run all axiom behavioral tests (requires ANTHRO
 
 - `cmd/axiom/` — CLI entrypoint (uses cobra)
 - `internal/agent/` — LLM agent loop and tool definitions
-- `internal/cli/` — CLI commands (run, init, list, cache)
+- `internal/cli/` — CLI commands (run, init, list, show, validate, cache, add)
 - `internal/runner/` — Test execution orchestration
 - `internal/discovery/` — YAML test file parsing
 - `internal/cache/` — Content-hash based test caching
 - `internal/config/` — Config loading and .env parsing
 - `internal/glob/` — Go-native glob matching
-- `internal/output/` — Terminal and JSON output formatting
+- `internal/notes/` — Agent memory / codebase notes caching
+- `internal/output/` — Terminal, JSON, and GitHub Markdown output formatting
 - `internal/display/` — Live terminal spinner
+- `internal/provider/` — LLM provider abstraction (Anthropic, OpenAI, Gemini)
 - `internal/scaffold/` — Test template generation
+- `internal/watch/` — File watching for `--watch` mode (fsnotify)
 - `internal/types/` — Shared type definitions
+- `docs/` — mdBook documentation site (deployed to GitHub Pages)
+- `action.yml` — Reusable GitHub Action for CI
 - `.axiom/` — Behavioral test definitions (YAML)
 - `.github/workflows/ci.yml` — CI: build, vet, test on PRs; axiom run on main push
+- `.github/workflows/docs.yml` — Docs: build and deploy mdBook to GitHub Pages
 
 ## Workflow
 
@@ -42,8 +48,9 @@ go run ./cmd/axiom/ run --all  # Run all axiom behavioral tests (requires ANTHRO
 - `cobra` — CLI framework
 - `fatih/color` — Terminal colors
 - `tidwall/gjson` + `sjson` — JSON manipulation
+- `fsnotify/fsnotify` — File system watching (watch mode)
 
 ## Configuration
 
-- `axiom.yml` — Project config (model, agent settings)
-- `.env` — API keys (gitignored, never commit)
+- `axiom.yml` — Project config (model, provider, base_url, agent settings, cache)
+- `.env` — API keys (gitignored, never commit): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY`

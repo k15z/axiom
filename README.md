@@ -138,6 +138,10 @@ In non-TTY environments (CI), axiom prints per-test progress lines to stderr as 
 model: claude-haiku-4-5-20251001   # default model
 test_dir: .axiom/
 
+# Multi-provider support: anthropic (default), openai, or gemini
+# provider: openai
+# base_url: http://localhost:11434/v1  # for OpenAI-compatible endpoints (Ollama, vLLM)
+
 cache:
   enabled: true
   dir: .axiom/.cache/
@@ -146,9 +150,33 @@ agent:
   max_iterations: 30    # max tool-use turns per test
   max_tokens: 10000     # max tokens per LLM response
   timeout: 0            # per-test timeout in seconds (0 = no timeout)
+  tool_timeout: 30      # per-tool timeout in seconds
 ```
 
-`ANTHROPIC_API_KEY` can be set in the environment or a `.env` file at the project root. Existing environment variables take precedence over `.env`.
+### Multi-Provider Support
+
+Axiom supports Anthropic (default), OpenAI, and Gemini. The provider is auto-detected from the model name, or set explicitly:
+
+```yaml
+# OpenAI
+provider: openai
+model: gpt-4o
+
+# Gemini
+provider: gemini
+model: gemini-2.0-flash
+
+# OpenAI-compatible (Ollama, vLLM, etc.)
+provider: openai
+model: llama3
+base_url: http://localhost:11434/v1
+```
+
+Set the appropriate API key: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` in your environment or `.env` file.
+
+### Agent Memory
+
+Axiom's agent builds notes about your codebase across runs, stored in `.axiom/.cache/notes.json`. On subsequent runs, the agent skips redundant exploration and goes straight to evaluating what changed — reducing token costs and speeding up runs. Notes are automatically invalidated when referenced files change.
 
 ## Caching
 
@@ -215,12 +243,14 @@ Passing tests show a one-line summary by default. Use `--verbose` for full reaso
 
 ```
 axiom/
-├── axiom.yml              # project config (model, agent settings, cache)
+├── axiom.yml              # project config (model, provider, agent settings, cache)
+├── action.yml             # reusable GitHub Action
 ├── .axiom/                # test definitions (recursively discovered)
 │   ├── architecture.yml
 │   ├── security.yml
 │   └── features/          # subdirectories supported
 │       └── auth.yml
+├── docs/                  # mdBook documentation site
 ├── cmd/axiom/main.go
 └── internal/
     ├── agent/             # agentic tool loop
@@ -229,6 +259,10 @@ axiom/
     ├── config/            # config + .env loading
     ├── discovery/         # recursive YAML test parsing
     ├── display/           # live terminal spinner
-    ├── output/            # terminal + JSON output
-    └── runner/            # orchestration + parallel execution
+    ├── notes/             # agent memory / codebase notes caching
+    ├── output/            # terminal, JSON, and GitHub Markdown output
+    ├── provider/          # LLM provider abstraction (Anthropic, OpenAI, Gemini)
+    ├── runner/            # orchestration + parallel execution
+    ├── scaffold/          # test template generation (init, add)
+    └── watch/             # file watching for --watch mode (fsnotify)
 ```
