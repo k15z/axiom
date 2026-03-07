@@ -14,6 +14,7 @@ import (
 	"github.com/k15z/axiom/internal/config"
 	"github.com/k15z/axiom/internal/discovery"
 	"github.com/k15z/axiom/internal/display"
+	"github.com/k15z/axiom/internal/notes"
 	"github.com/k15z/axiom/internal/provider"
 	"github.com/k15z/axiom/internal/types"
 )
@@ -69,6 +70,10 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 			c = cache.New(cfg.Cache.Dir, configHash)
 		}
 	}
+
+	// Load agent notes for context injection
+	noteStore := notes.Load(cfg.Cache.Dir)
+	var notesMu sync.Mutex
 
 	concurrency := opts.Concurrency
 	if concurrency <= 0 {
@@ -210,10 +215,16 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 			}
 			p := newProvider(cfg, textProgress)
 
+			// Build prior notes context for the agent
+			notesMu.Lock()
+			priorNotes := buildPriorNotes(noteStore, t.Name, repoRoot)
+			notesMu.Unlock()
+
 			result, err := agent.Run(runCtx, p, testModel, t.Condition, t.On, repoRoot, progress, agent.RunOptions{
 				MaxIterations: testMaxIter,
 				MaxTokens:     cfg.Agent.MaxTokens,
 				ToolTimeout:   time.Duration(cfg.Agent.ToolTimeout) * time.Second,
+				PriorNotes:    priorNotes,
 			})
 			duration := time.Since(start)
 
@@ -231,6 +242,13 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 				tr.Reasoning = result.Reasoning
 			}
 
+			// Save agent notes for future runs
+			if result.Notes != "" {
+				notesMu.Lock()
+				noteStore.UpdateTestNotes(t.Name, result.Notes, result.NoteFiles, repoRoot)
+				notesMu.Unlock()
+			}
+
 			// Retry failed tests. If a retry passes, mark as flaky.
 			if !tr.Passed && opts.Retries > 0 {
 				for retry := 1; retry <= opts.Retries; retry++ {
@@ -244,6 +262,7 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 						MaxIterations: testMaxIter,
 						MaxTokens:     cfg.Agent.MaxTokens,
 						ToolTimeout:   time.Duration(cfg.Agent.ToolTimeout) * time.Second,
+						PriorNotes:    priorNotes,
 					})
 					tr.Duration = time.Since(start)
 					tr.Usage.InputTokens += retryResult.Usage.InputTokens
@@ -296,6 +315,11 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 		cacheMu.Unlock()
 	}
 
+	// Save agent notes
+	notesMu.Lock()
+	_ = noteStore.Save(cfg.Cache.Dir)
+	notesMu.Unlock()
+
 	// Collect results in original order
 	var out []types.TestResult
 	for i, r := range results {
@@ -309,6 +333,35 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 // ClearCache deletes the test cache. Used by the cache clear command.
 func ClearCache(cacheDir string) error {
 	return cache.New(cacheDir, "").Clear()
+}
+
+// buildPriorNotes assembles context from cached notes for a specific test.
+// Combines codebase-level and test-specific notes with staleness caveats.
+func buildPriorNotes(store *notes.Store, testName string, repoRoot string) string {
+	var parts []string
+
+	cbNotes, cbStale := store.GetCodebaseNotes(repoRoot)
+	if cbNotes != "" {
+		header := "Codebase overview"
+		if cbStale {
+			header += " (some referenced files changed — verify)"
+		}
+		parts = append(parts, header+":\n"+cbNotes)
+	}
+
+	testNotes, testStale := store.GetTestNotes(testName, repoRoot)
+	if testNotes != "" {
+		header := "Previous investigation of this test"
+		if testStale {
+			header += " (some referenced files changed — verify)"
+		}
+		parts = append(parts, header+":\n"+testNotes)
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 // GetStatuses returns the cached status for each test without running any agents.

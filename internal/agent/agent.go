@@ -19,6 +19,8 @@ type Usage struct {
 type Result struct {
 	Passed    bool
 	Reasoning string
+	Notes     string   // agent's investigation notes for caching
+	NoteFiles []string // file paths referenced in notes
 	Usage     Usage
 }
 
@@ -48,7 +50,12 @@ VERDICT: PASS
 or
 
 VERDICT: FAIL
-<brief reasoning explaining what's missing or wrong>`
+<brief reasoning explaining what's missing or wrong>
+
+After your verdict, optionally add investigation notes for future runs:
+
+NOTES:
+<compact summary of key files, patterns found, and investigation path — this helps skip redundant exploration next time>`
 
 const tokenBudgetHint = "You are running low on your token budget. Please state your verdict now using the VERDICT: PASS or VERDICT: FAIL format, with brief reasoning."
 
@@ -69,6 +76,7 @@ type RunOptions struct {
 	MaxIterations int
 	MaxTokens     int
 	ToolTimeout   time.Duration // per-tool timeout; 0 means no timeout
+	PriorNotes    string        // cached notes from previous runs (injected as context)
 }
 
 func Run(ctx context.Context, p provider.Provider, model string, condition string, onGlobs []string, repoRoot string, progress ProgressFunc, opts RunOptions) (Result, error) {
@@ -83,6 +91,11 @@ func Run(ctx context.Context, p provider.Provider, model string, condition strin
 	}
 
 	var userMsg strings.Builder
+	if opts.PriorNotes != "" {
+		userMsg.WriteString("Previous investigation notes (verify before relying on these):\n")
+		userMsg.WriteString(opts.PriorNotes)
+		userMsg.WriteString("\n\n")
+	}
 	userMsg.WriteString("Condition: ")
 	userMsg.WriteString(condition)
 	if len(onGlobs) > 0 {
@@ -218,17 +231,89 @@ func formatToolCall(name string, input json.RawMessage) string {
 func parseVerdict(text string) Result {
 	upper := strings.ToUpper(text)
 
+	// Extract notes if present (before or after verdict)
+	agentNotes, noteFiles := parseNotes(text)
+
 	if idx := strings.Index(upper, "VERDICT: PASS"); idx != -1 {
-		reasoning := strings.TrimSpace(text[idx+len("VERDICT: PASS"):])
-		return Result{Passed: true, Reasoning: reasoning}
+		reasoning := stripNotes(strings.TrimSpace(text[idx+len("VERDICT: PASS"):]))
+		return Result{Passed: true, Reasoning: reasoning, Notes: agentNotes, NoteFiles: noteFiles}
 	}
 	if idx := strings.Index(upper, "VERDICT: FAIL"); idx != -1 {
-		reasoning := strings.TrimSpace(text[idx+len("VERDICT: FAIL"):])
-		return Result{Passed: false, Reasoning: reasoning}
+		reasoning := stripNotes(strings.TrimSpace(text[idx+len("VERDICT: FAIL"):]))
+		return Result{Passed: false, Reasoning: reasoning, Notes: agentNotes, NoteFiles: noteFiles}
 	}
 
 	return Result{
 		Passed:    false,
 		Reasoning: fmt.Sprintf("Could not parse verdict from agent response:\n%s", text),
+		Notes:     agentNotes,
+		NoteFiles: noteFiles,
 	}
+}
+
+// parseNotes extracts the NOTES: section from agent output and any file paths
+// mentioned in the format "path/to/file.ext:line" or "path/to/file.ext".
+func parseNotes(text string) (string, []string) {
+	upper := strings.ToUpper(text)
+	idx := strings.Index(upper, "\nNOTES:")
+	if idx == -1 {
+		// Check at start of text too
+		if strings.HasPrefix(upper, "NOTES:") {
+			idx = 0
+		} else {
+			return "", nil
+		}
+	} else {
+		idx++ // skip the leading newline
+	}
+
+	notesText := strings.TrimSpace(text[idx+len("NOTES:"):])
+
+	// Extract file paths (pattern: word/word.ext or word/word.ext:digits)
+	files := extractFilePaths(notesText)
+
+	return notesText, files
+}
+
+// extractFilePaths finds paths like "internal/auth.go:23" or "src/main.py"
+// in notes text.
+func extractFilePaths(text string) []string {
+	seen := make(map[string]bool)
+	var files []string
+	for _, word := range strings.Fields(text) {
+		// Strip common punctuation
+		word = strings.TrimRight(word, ".,;:)")
+		word = strings.TrimLeft(word, "(")
+		// Remove trailing line number reference
+		if colonIdx := strings.LastIndex(word, ":"); colonIdx > 0 {
+			afterColon := word[colonIdx+1:]
+			isDigits := true
+			for _, c := range afterColon {
+				if c < '0' || c > '9' {
+					isDigits = false
+					break
+				}
+			}
+			if isDigits && len(afterColon) > 0 {
+				word = word[:colonIdx]
+			}
+		}
+		// Check if it looks like a file path
+		if strings.Contains(word, "/") && strings.Contains(word, ".") && !strings.HasPrefix(word, "http") {
+			if !seen[word] {
+				seen[word] = true
+				files = append(files, word)
+			}
+		}
+	}
+	return files
+}
+
+// stripNotes removes NOTES: section from reasoning text.
+func stripNotes(text string) string {
+	upper := strings.ToUpper(text)
+	if idx := strings.Index(upper, "\nNOTES:"); idx != -1 {
+		return strings.TrimSpace(text[:idx])
+	}
+	return text
 }

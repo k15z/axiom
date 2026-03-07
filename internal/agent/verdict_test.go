@@ -1,6 +1,9 @@
 package agent
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestShouldInjectBudgetHint(t *testing.T) {
 	tests := []struct {
@@ -181,5 +184,93 @@ func TestParseVerdict(t *testing.T) {
 				t.Errorf("parseVerdict(%q).Reasoning = %q, want %q", tt.text, got.Reasoning, tt.wantReasoning)
 			}
 		})
+	}
+}
+
+func TestParseVerdictWithNotes(t *testing.T) {
+	text := "VERDICT: PASS\nAuth middleware correctly applied.\nNOTES:\nKey files: internal/auth/middleware.go:23, internal/routes/admin.go:45\nPattern: JWT verification via verify_token() decorator"
+
+	got := parseVerdict(text)
+	if !got.Passed {
+		t.Error("expected pass")
+	}
+	if strings.Contains(got.Reasoning, "NOTES:") {
+		t.Error("reasoning should not contain NOTES section")
+	}
+	if got.Notes == "" {
+		t.Error("expected non-empty notes")
+	}
+	if !strings.Contains(got.Notes, "JWT verification") {
+		t.Errorf("notes = %q, want to contain 'JWT verification'", got.Notes)
+	}
+	if len(got.NoteFiles) == 0 {
+		t.Error("expected file paths in notes")
+	}
+	// Should extract internal/auth/middleware.go and internal/routes/admin.go
+	found := map[string]bool{}
+	for _, f := range got.NoteFiles {
+		found[f] = true
+	}
+	if !found["internal/auth/middleware.go"] {
+		t.Errorf("expected internal/auth/middleware.go in NoteFiles, got %v", got.NoteFiles)
+	}
+	if !found["internal/routes/admin.go"] {
+		t.Errorf("expected internal/routes/admin.go in NoteFiles, got %v", got.NoteFiles)
+	}
+}
+
+func TestParseVerdictNoNotes(t *testing.T) {
+	text := "VERDICT: PASS\nEverything looks good."
+	got := parseVerdict(text)
+	if got.Notes != "" {
+		t.Errorf("expected empty notes, got %q", got.Notes)
+	}
+	if len(got.NoteFiles) != 0 {
+		t.Errorf("expected no note files, got %v", got.NoteFiles)
+	}
+}
+
+func TestExtractFilePaths(t *testing.T) {
+	cases := []struct {
+		text string
+		want []string
+	}{
+		{"internal/auth.go:23", []string{"internal/auth.go"}},
+		{"internal/auth.go", []string{"internal/auth.go"}},
+		{"src/main.py:100, src/utils.py:50", []string{"src/main.py", "src/utils.py"}},
+		{"no paths here", nil},
+		{"http://example.com/foo.bar is not a file", nil},
+		{"(internal/foo.go)", []string{"internal/foo.go"}},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.text, func(t *testing.T) {
+			got := extractFilePaths(tt.text)
+			if len(got) != len(tt.want) {
+				t.Fatalf("extractFilePaths(%q) = %v, want %v", tt.text, got, tt.want)
+			}
+			for i, w := range tt.want {
+				if got[i] != w {
+					t.Errorf("extractFilePaths(%q)[%d] = %q, want %q", tt.text, i, got[i], w)
+				}
+			}
+		})
+	}
+}
+
+func TestStripNotes(t *testing.T) {
+	text := "Auth middleware applied correctly.\nNOTES:\nKey files: internal/auth.go"
+	got := stripNotes(text)
+	if strings.Contains(got, "NOTES:") {
+		t.Errorf("stripNotes should remove NOTES section, got %q", got)
+	}
+	if got != "Auth middleware applied correctly." {
+		t.Errorf("stripNotes = %q, want %q", got, "Auth middleware applied correctly.")
+	}
+
+	// No notes section
+	plain := "Just reasoning"
+	if stripNotes(plain) != plain {
+		t.Error("stripNotes should not modify text without NOTES section")
 	}
 }
