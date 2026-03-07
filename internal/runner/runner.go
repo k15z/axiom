@@ -105,6 +105,7 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 	included := make([]bool, len(tests))
 
 	sem := make(chan struct{}, concurrency)
+	throttle := newThrottle()
 	var wg sync.WaitGroup
 
 	for i, test := range tests {
@@ -142,6 +143,9 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
+
+			// Rate-limit backoff: pause before starting if throttle is active
+			throttle.Wait()
 
 			// Check if bailed before starting
 			select {
@@ -236,6 +240,9 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 			if err != nil {
 				tr.Errored = true
 				tr.Reasoning = "Agent error: " + err.Error()
+				if isRateLimitErr(err) {
+					throttle.Signal()
+				}
 			} else {
 				tr.Passed = result.Passed
 				tr.Reasoning = result.Reasoning
@@ -328,6 +335,19 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 		}
 	}
 	return out, nil
+}
+
+// newThrottle creates the rate-limit throttle for a run.
+// Declared as a variable so tests can override it with a fast throttle.
+var newThrottle = NewThrottle
+
+// isRateLimitErr checks if an error indicates a rate limit (429) response.
+func isRateLimitErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "429") || strings.Contains(s, "rate limit") || strings.Contains(s, "rate_limit")
 }
 
 // ClearCache deletes the test cache. Used by the cache clear command.
