@@ -16,7 +16,8 @@ type CacheConfig struct {
 type AgentConfig struct {
 	MaxIterations int `yaml:"max_iterations"`
 	MaxTokens     int `yaml:"max_tokens"`
-	Timeout       int `yaml:"timeout"` // per-test timeout in seconds; 0 means no timeout
+	Timeout       int `yaml:"timeout"`      // per-test timeout in seconds; 0 means no timeout
+	ToolTimeout   int `yaml:"tool_timeout"` // per-tool timeout in seconds; 0 means no timeout
 }
 
 type Config struct {
@@ -39,6 +40,7 @@ func Default() Config {
 			MaxIterations: 30,
 			MaxTokens:     10000,
 			Timeout:       0,
+			ToolTimeout:   30,
 		},
 	}
 }
@@ -70,6 +72,9 @@ func Load(testDir string) (Config, error) {
 		}
 		if cfg.Agent.MaxTokens == 0 {
 			cfg.Agent.MaxTokens = d.Agent.MaxTokens
+		}
+		if cfg.Agent.ToolTimeout == 0 {
+			cfg.Agent.ToolTimeout = d.Agent.ToolTimeout
 		}
 	}
 

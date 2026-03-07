@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/k15z/axiom/internal/glob"
@@ -116,25 +118,56 @@ func jsonSchema(v any) anthropic.ToolInputSchemaParam {
 }
 
 // ExecuteTool dispatches a tool call and returns the result string.
-func ExecuteTool(name string, inputJSON json.RawMessage, repoRoot string) (string, bool) {
+// If timeout > 0, the tool is cancelled after that duration (in addition to any
+// deadline already on ctx). This prevents a slow grep on a large repo from
+// consuming the entire test's time budget.
+func ExecuteTool(ctx context.Context, name string, inputJSON json.RawMessage, repoRoot string, timeout time.Duration) (string, bool) {
 	var input map[string]any
 	if err := json.Unmarshal(inputJSON, &input); err != nil {
 		return fmt.Sprintf("error parsing input: %s", err), true
 	}
 
-	switch name {
-	case "read_file":
-		return toolReadFile(getString(input, "path"), getInt(input, "start_line"), getInt(input, "end_line"), repoRoot)
-	case "glob":
-		return toolGlob(getString(input, "pattern"), repoRoot)
-	case "grep":
-		return toolGrep(getString(input, "pattern"), getString(input, "glob"), repoRoot)
-	case "list_dir":
-		return toolListDir(getString(input, "path"), repoRoot)
-	case "tree":
-		return toolTree(getString(input, "path"), getInt(input, "depth"), repoRoot)
-	default:
-		return fmt.Sprintf("unknown tool: %s", name), true
+	toolCtx := ctx
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		toolCtx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
+	type toolResult struct {
+		output  string
+		isError bool
+	}
+	ch := make(chan toolResult, 1)
+
+	go func() {
+		var out string
+		var isErr bool
+		switch name {
+		case "read_file":
+			out, isErr = toolReadFile(getString(input, "path"), getInt(input, "start_line"), getInt(input, "end_line"), repoRoot)
+		case "glob":
+			out, isErr = toolGlob(getString(input, "pattern"), repoRoot)
+		case "grep":
+			out, isErr = toolGrep(getString(input, "pattern"), getString(input, "glob"), repoRoot)
+		case "list_dir":
+			out, isErr = toolListDir(getString(input, "path"), repoRoot)
+		case "tree":
+			out, isErr = toolTree(getString(input, "path"), getInt(input, "depth"), repoRoot)
+		default:
+			out, isErr = fmt.Sprintf("unknown tool: %s", name), true
+		}
+		ch <- toolResult{out, isErr}
+	}()
+
+	select {
+	case r := <-ch:
+		return r.output, r.isError
+	case <-toolCtx.Done():
+		// TODO: thread toolCtx into walk-heavy tools (toolGrep, toolTree) so
+		// they can bail early on cancellation. For now the goroutine continues
+		// until its I/O completes then writes to the buffered channel and is GC'd.
+		return fmt.Sprintf("tool %q timed out", name), true
 	}
 }
 

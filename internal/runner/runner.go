@@ -152,6 +152,7 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 			result, err := agent.Run(runCtx, cfg.APIKey, cfg.Model, t.Condition, t.On, repoRoot, progress, agent.RunOptions{
 				MaxIterations: cfg.Agent.MaxIterations,
 				MaxTokens:     cfg.Agent.MaxTokens,
+				ToolTimeout:   time.Duration(cfg.Agent.ToolTimeout) * time.Second,
 			})
 			duration := time.Since(start)
 

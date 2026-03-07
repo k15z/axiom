@@ -192,7 +192,7 @@ func GenerateTests(ctx context.Context, apiKey, model, repoRoot string, progress
 			case anthropic.ToolUseBlock:
 				summary := formatToolCall(v.Name, v.Input)
 				progress(summary)
-				result, isError := agent.ExecuteTool(v.Name, v.Input, repoRoot)
+				result, isError := agent.ExecuteTool(ctx, v.Name, v.Input, repoRoot, 0)
 				toolResults = append(toolResults, anthropic.NewToolResultBlock(v.ID, result, isError))
 			case anthropic.TextBlock:
 				finalText.WriteString(v.Text)

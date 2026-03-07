@@ -56,6 +56,7 @@ VERDICT: FAIL
 type RunOptions struct {
 	MaxIterations int
 	MaxTokens     int
+	ToolTimeout   time.Duration // per-tool timeout; 0 means no timeout
 }
 
 func Run(ctx context.Context, apiKey string, model string, condition string, onGlobs []string, repoRoot string, progress ProgressFunc, opts RunOptions) (Result, error) {
@@ -120,7 +121,7 @@ func Run(ctx context.Context, apiKey string, model string, condition string, onG
 			case anthropic.ToolUseBlock:
 				summary := formatToolCall(v.Name, v.Input)
 				progress(Event{Kind: "tool_call", Message: summary})
-				result, isError := ExecuteTool(v.Name, v.Input, repoRoot)
+				result, isError := ExecuteTool(ctx, v.Name, v.Input, repoRoot, opts.ToolTimeout)
 				toolResults = append(toolResults, anthropic.NewToolResultBlock(v.ID, result, isError))
 			case anthropic.TextBlock:
 				finalText.WriteString(v.Text)
