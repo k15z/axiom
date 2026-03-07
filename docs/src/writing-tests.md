@@ -29,20 +29,69 @@ test_name:
 
 This is the most important field. The agent reads it and explores your codebase to determine if it holds.
 
-### Good Conditions
+### Behavioral vs Implementation Tests
 
-Good conditions are **specific**, **measurable**, and reference **concrete patterns**:
+The most important principle for writing good axiom tests: **assert behavior, not implementation**. Tests should describe *what* property should hold, not *how* it is implemented. This makes tests robust to refactoring -- if someone renames a function, restructures packages, or changes an approach, the behavioral property is still testable.
+
+**Good (behavioral):** Describes the property that matters.
 
 ```yaml
-test_path_traversal_prevention:
+test_agent_is_leaf_dependency:
   on:
-    - internal/agent/tools.go
+    - internal/agent/**/*.go
   condition: >
-    All agent tools that accept file paths (read_file, list_dir, glob, grep)
-    must validate that resolved paths do not escape the repository root
-    directory. There should be a shared path validation function that converts
-    relative paths to absolute, then checks they are prefixed by the repo root.
-    Paths like "../../../etc/passwd" must be rejected.
+    The agent package should be a leaf dependency -- it should not import
+    any higher-level packages from this project (such as CLI commands, test
+    runners, output formatting, or test discovery).
+```
+
+**Bad (implementation-specific):** Hardcodes specific package names the agent shouldn't import.
+
+```yaml
+test_agent_has_no_upstream_imports:
+  on:
+    - internal/agent/*.go
+  condition: >
+    The agent package must not import any of these packages:
+    internal/cli, internal/runner, internal/output, internal/discovery,
+    or internal/cache. Check all import blocks in internal/agent/.
+```
+
+The good version lets the agent figure out which packages are "higher-level." If you add a new package later, the test still works. The bad version requires manual updates every time the package list changes.
+
+More examples:
+
+| Bad (implementation) | Good (behavioral) |
+|---|---|
+| "Functions should wrap errors using `fmt.Errorf('desc: %w', err)`" | "Error messages should include enough context to diagnose where the problem originated" |
+| "Check that each exported func has a comment on the line immediately before it" | "All public API surfaces should be documented" |
+| "The CLI should wrap errors in a SetupError type and check using errors.As" | "Setup errors should cause a different exit code than test failures" |
+| "There should be a shared path validation function that checks the repo root prefix" | "Agent tools that accept file paths must prevent path traversal outside the repo" |
+
+### What NOT to Test with Axiom
+
+Some properties are better enforced by other tools:
+
+- **Circular imports** -- already caught by `go build` (or your language's compiler)
+- **Code formatting** -- use `gofmt`, `prettier`, etc.
+- **Type correctness** -- that is what compilers and type checkers are for
+- **Specific function behavior** -- use unit tests
+- **Linting rules** -- use `golangci-lint`, `eslint`, etc.
+
+Axiom is best for **cross-cutting behavioral properties** that span multiple files and are hard to express as unit tests or lint rules.
+
+### Good Conditions
+
+Good conditions are **specific**, **behavioral**, and describe **what should be true**:
+
+```yaml
+test_agent_tools_prevent_path_traversal:
+  on:
+    - internal/agent/**/*.go
+  condition: >
+    Agent tools that accept file paths must prevent path traversal attacks.
+    Resolved paths should be confined to the repository root -- attempts to
+    access files outside the repo (e.g., "../../../etc/passwd") must be rejected.
 ```
 
 ```yaml
@@ -50,10 +99,9 @@ test_atomic_balance_updates:
   on:
     - src/ledger/**/*.py
   condition: >
-    All balance mutations must use SELECT FOR UPDATE within a transaction.
-    No balance update should read the current value and then write without
-    holding a row-level lock. Check for patterns where balance is read in
-    one query and updated in a separate query without FOR UPDATE.
+    All balance mutations must happen atomically. A balance should never
+    be read and then updated in separate operations without holding a lock,
+    as this creates race conditions.
 ```
 
 ### Bad Conditions
@@ -72,6 +120,22 @@ test_good_naming:
 # BAD: no concrete pattern to verify
 test_performance:
   condition: "The application should be fast"
+```
+
+Also avoid over-specified conditions that dictate implementation details:
+
+```yaml
+# BAD: prescribes exact implementation
+test_errors:
+  condition: >
+    Functions must wrap errors using fmt.Errorf("description: %w", err).
+    Check that all error return paths use the %w verb.
+
+# BAD: lists specific names that may change
+test_imports:
+  condition: >
+    The agent package must not import internal/cli, internal/runner,
+    internal/output, internal/discovery, or internal/cache.
 ```
 
 ## The `on` Field

@@ -61,6 +61,7 @@ runs:
         GEMINI_API_KEY: ${{ inputs.provider == 'gemini' && inputs.api_key || '' }}
       run: |
         args="--all --format github"
+        args="$args --provider ${{ inputs.provider }}"
         if [ -n "${{ inputs.model }}" ]; then
           args="$args --model ${{ inputs.model }}"
         fi

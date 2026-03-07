@@ -26,6 +26,7 @@ func newRunCmd() *cobra.Command {
 		dir         string
 		verbose     bool
 		model       string
+		prov        string
 		bail        bool
 		jsonOut     bool
 		format      string
@@ -58,6 +59,9 @@ func newRunCmd() *cobra.Command {
 
 			if model != "" {
 				cfg.Model = model
+			}
+			if prov != "" {
+				cfg.Provider = prov
 			}
 
 			// Watch mode: run tests then watch for changes
@@ -159,6 +163,7 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&dir, "dir", "d", "", "Path to test directory (default: .axiom/)")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show full agent reasoning (default: one-line summary)")
 	cmd.Flags().StringVarP(&model, "model", "m", "", "LLM model to use")
+	cmd.Flags().StringVarP(&prov, "provider", "p", "", "LLM provider: anthropic, openai, or gemini")
 	cmd.Flags().BoolVarP(&bail, "bail", "b", false, "Stop on first failure")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output results as JSON")
 	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json, or github")

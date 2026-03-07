@@ -1,22 +1,19 @@
-test_errors_wrapped_with_context:
+test_errors_include_diagnostic_context:
   tags: [error-handling]
   on:
     - internal/**/*.go
   condition: >
-    Functions in the runner, cache, discovery, and config packages that return
-    errors should wrap them with context using fmt.Errorf("description: %w", err)
-    rather than returning bare errors. This ensures error messages include enough
-    information to diagnose where the problem originated. Check that error return
-    paths in these packages use %w wrapping.
+    Error messages returned from internal packages should include enough
+    context to diagnose where the problem originated. Functions that receive
+    an error from a callee should wrap it with additional context before
+    returning, rather than passing it through bare.
 
-test_setup_errors_exit_code_2:
+test_setup_errors_use_distinct_exit_code:
   tags: [error-handling]
   on:
-    - internal/cli/root.go
-    - internal/cli/run.go
+    - internal/cli/**/*.go
   condition: >
-    Setup errors (missing API key, bad YAML, test directory not found) must cause
-    exit code 2, not exit code 1. The CLI should wrap these in a SetupError type
-    in root.go, and the root command's Execute function should check for SetupError
-    using errors.As and call os.Exit(2). In run.go, errors from config.Load and
-    discovery.Discover should be wrapped in SetupError before returning.
+    Setup errors (such as missing API keys, invalid configuration, or test
+    directory not found) should cause a different exit code than test failures.
+    This allows CI systems and scripts to distinguish between "tests failed"
+    and "axiom could not run at all."

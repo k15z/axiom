@@ -1,41 +1,27 @@
-test_clean_package_dependencies:
+test_agent_is_leaf_dependency:
   tags: [architecture]
   on:
-    - internal/**/*.go
+    - internal/agent/**/*.go
   condition: >
-    The internal packages should have clean dependency flow: cli depends on
-    config, discovery, runner, and output. Runner depends on agent, cache,
-    config, and discovery. Agent should NOT import from cli, runner, output,
-    or discovery. Cache should NOT import from agent, runner, cli, or output.
-    No circular dependencies should exist.
+    The agent package should be a leaf dependency -- it should not import any
+    higher-level packages from this project (such as CLI commands, test runners,
+    output formatting, or test discovery). It should only depend on low-level
+    utilities and external libraries.
 
-test_agent_tool_loop_terminates:
+test_cli_does_not_directly_use_agent:
+  tags: [architecture]
+  on:
+    - internal/cli/**/*.go
+  condition: >
+    The CLI layer should not directly depend on the agent package. Interaction
+    between the CLI and the agent should be mediated by an orchestration layer
+    (e.g., the runner), maintaining separation of concerns.
+
+test_agent_loop_has_bounded_execution:
   tags: [architecture, reliability]
   on:
-    - internal/agent/agent.go
+    - internal/agent/**/*.go
   condition: >
-    The agent tool loop must have a maximum iteration limit to prevent runaway
-    API calls. If the agent exceeds this limit, it should return a failure result
-    rather than looping indefinitely. The limit should be clearly defined as a
-    constant or configurable parameter.
-
-test_cli_does_not_import_agent:
-  tags: [architecture]
-  on:
-    - internal/cli/*.go
-    - internal/agent/*.go
-  condition: >
-    CLI command files in internal/cli/ must not directly import the
-    internal/agent package. The CLI layer should interact with the agent
-    only through the runner package, which handles orchestration. Check
-    the import statements of all files in internal/cli/.
-
-test_agent_has_no_upstream_imports:
-  tags: [architecture]
-  on:
-    - internal/agent/*.go
-  condition: >
-    The agent package (internal/agent/) must not import any of these packages:
-    internal/cli, internal/runner, internal/output, internal/discovery, or
-    internal/cache. The agent is a leaf dependency that only knows about its
-    own tools and the Anthropic SDK. Check all import blocks in internal/agent/.
+    The agent's tool-use loop must have a maximum iteration bound to prevent
+    runaway API calls. If the limit is exceeded, the agent should stop and
+    return a failure rather than looping indefinitely.

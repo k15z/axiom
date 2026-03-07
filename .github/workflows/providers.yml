@@ -1,0 +1,48 @@
+name: Multi-Provider Tests
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  provider-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - provider: anthropic
+            model: claude-haiku-4-5-20251001
+            api_key_secret: ANTHROPIC_API_KEY
+            api_key_env: ANTHROPIC_API_KEY
+          - provider: openai
+            model: gpt-4o-mini
+            api_key_secret: OPENAI_API_KEY
+            api_key_env: OPENAI_API_KEY
+          - provider: gemini
+            model: gemini-2.0-flash
+            api_key_secret: GEMINI_API_KEY
+            api_key_env: GEMINI_API_KEY
+
+    name: ${{ matrix.provider }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run axiom test with ${{ matrix.provider }}
+        env:
+          ${{ matrix.api_key_env }}: ${{ secrets[matrix.api_key_secret] }}
+        run: |
+          go run -buildvcs=false ./cmd/axiom/ run \
+            --provider ${{ matrix.provider }} \
+            --model ${{ matrix.model }} \
+            --filter "test_agent_tools_prevent_path_traversal" \
+            --all
