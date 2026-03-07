@@ -69,10 +69,17 @@ func (d *LiveDisplay) Update(name, status string) {
 	defer d.mu.Unlock()
 	if idx, ok := d.byName[name]; ok {
 		d.slots[idx].status = status
-		if !tty {
+		// In non-TTY (CI), only print tool calls — skip streaming text to avoid flooding logs.
+		if !tty && !isTextDelta(status) {
 			color.New(color.FgHiBlack).Fprintf(os.Stderr, "  [%d/%d] [%s] %s\n", d.completed, d.total, name, status)
 		}
 	}
+}
+
+// isTextDelta returns true for streaming text updates (prefixed with "✎ "),
+// which arrive frequently and would flood CI logs.
+func isTextDelta(status string) bool {
+	return len(status) >= 4 && status[:4] == "✎ "
 }
 
 func (d *LiveDisplay) FinishTest(name string, passed, cached, skipped bool, dur time.Duration) {
