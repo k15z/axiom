@@ -11,15 +11,20 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/k15z/axiom/internal/config"
+	"github.com/k15z/axiom/internal/discovery"
+	"github.com/k15z/axiom/internal/output"
 	"github.com/k15z/axiom/internal/provider"
+	"github.com/k15z/axiom/internal/runner"
 	"github.com/k15z/axiom/internal/scaffold"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 func newAddCmd() *cobra.Command {
 	var model string
 	var file string
+	var runAfter bool
 
 	cmd := &cobra.Command{
 		Use:   "add <intent>",
@@ -78,6 +83,10 @@ Examples:
 				return fmt.Errorf("generating test: %w", err)
 			}
 
+			if err := validateTestYAML(yamlContent); err != nil {
+				return fmt.Errorf("generated invalid test: %w", err)
+			}
+
 			// Display the generated test
 			fmt.Println()
 			gray := color.New(color.FgHiBlack).SprintFunc()
@@ -111,6 +120,21 @@ Examples:
 					return err
 				}
 				fmt.Printf("Test added to %s\n", color.CyanString(targetPath))
+
+				// Offer to run the new test
+				testName := extractTestName(yamlContent)
+				if testName != "" {
+					shouldRun := runAfter
+					if !shouldRun && tty {
+						fmt.Printf("Run this test now? [Y/n] ")
+						runAnswer, _ := reader.ReadString('\n')
+						runAnswer = strings.TrimSpace(strings.ToLower(runAnswer))
+						shouldRun = runAnswer == "" || runAnswer == "y" || runAnswer == "yes"
+					}
+					if shouldRun {
+						return runNewTest(cfg, testName)
+					}
+				}
 				return nil
 			}
 
@@ -121,8 +145,80 @@ Examples:
 
 	cmd.Flags().StringVarP(&model, "model", "m", "", "Override LLM model")
 	cmd.Flags().StringVarP(&file, "file", "f", "tests.yml", "Target YAML file inside .axiom/")
+	cmd.Flags().BoolVar(&runAfter, "run", false, "Run the new test immediately after adding")
 
 	return cmd
+}
+
+// validateTestYAML checks that the YAML content is a valid axiom test definition:
+// must parse as YAML, have at least one top-level key with a non-empty "condition" field.
+func validateTestYAML(content string) error {
+	var raw yaml.Node
+	if err := yaml.Unmarshal([]byte(content), &raw); err != nil {
+		return fmt.Errorf("invalid YAML: %w", err)
+	}
+	if raw.Kind != yaml.DocumentNode || len(raw.Content) == 0 {
+		return fmt.Errorf("empty YAML document")
+	}
+	mapping := raw.Content[0]
+	if mapping.Kind != yaml.MappingNode || len(mapping.Content) < 2 {
+		return fmt.Errorf("YAML must contain at least one test definition")
+	}
+
+	// Check each test has a condition
+	for i := 0; i < len(mapping.Content)-1; i += 2 {
+		keyNode := mapping.Content[i]
+		valNode := mapping.Content[i+1]
+		var def struct {
+			Condition string `yaml:"condition"`
+		}
+		if err := valNode.Decode(&def); err != nil {
+			return fmt.Errorf("test %q: %w", keyNode.Value, err)
+		}
+		if def.Condition == "" {
+			return fmt.Errorf("test %q: condition is required", keyNode.Value)
+		}
+	}
+	return nil
+}
+
+// extractTestName parses YAML content and returns the first top-level key (the test name).
+func extractTestName(yamlContent string) string {
+	var raw yaml.Node
+	if err := yaml.Unmarshal([]byte(yamlContent), &raw); err != nil {
+		return ""
+	}
+	if raw.Kind != yaml.DocumentNode || len(raw.Content) == 0 {
+		return ""
+	}
+	mapping := raw.Content[0]
+	if mapping.Kind != yaml.MappingNode || len(mapping.Content) < 2 {
+		return ""
+	}
+	return mapping.Content[0].Value
+}
+
+// runNewTest discovers tests and runs just the named test through the standard runner.
+func runNewTest(cfg config.Config, testName string) error {
+	tests, err := discovery.Discover(cfg.TestDir)
+	if err != nil {
+		return fmt.Errorf("discovery: %w", err)
+	}
+
+	results, err := runner.Run(context.Background(), cfg, tests, runner.Options{
+		Filter: testName,
+		All:    true, // skip cache for new test
+	})
+	if err != nil {
+		return err
+	}
+
+	output.Print(results, cfg.Model, false)
+
+	if output.HasFailures(results) {
+		os.Exit(1)
+	}
+	return nil
 }
 
 // promptFileChoice lists YAML files in testDir and asks the user to pick one.
