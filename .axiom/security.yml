@@ -16,6 +16,17 @@ test_no_arbitrary_command_execution:
   condition: >
     The agent must not have any tool that allows arbitrary shell command execution.
     The only tool that runs a subprocess should be grep, and it must construct the
-    command itself from validated parameters — it should never pass user/LLM-provided
+    command itself from validated parameters -- it should never pass user/LLM-provided
     strings directly as the command to exec. No tool should use sh -c or similar
     shell invocation.
+
+test_api_key_not_leaked:
+  tags: [security]
+  on:
+    - internal/**/*.go
+  condition: >
+    The Anthropic API key must never be logged, printed to stdout/stderr, or
+    included in error messages. Search for any fmt.Print, log.Print, fmt.Errorf,
+    or fmt.Fprintf calls that reference the API key variable or field. The key
+    should only be passed to the Anthropic client constructor in agent.go and
+    to the scaffold package for test generation.

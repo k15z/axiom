@@ -18,3 +18,24 @@ test_agent_tool_loop_terminates:
     API calls. If the agent exceeds this limit, it should return a failure result
     rather than looping indefinitely. The limit should be clearly defined as a
     constant or configurable parameter.
+
+test_cli_does_not_import_agent:
+  tags: [architecture]
+  on:
+    - internal/cli/*.go
+    - internal/agent/*.go
+  condition: >
+    CLI command files in internal/cli/ must not directly import the
+    internal/agent package. The CLI layer should interact with the agent
+    only through the runner package, which handles orchestration. Check
+    the import statements of all files in internal/cli/.
+
+test_agent_has_no_upstream_imports:
+  tags: [architecture]
+  on:
+    - internal/agent/*.go
+  condition: >
+    The agent package (internal/agent/) must not import any of these packages:
+    internal/cli, internal/runner, internal/output, internal/discovery, or
+    internal/cache. The agent is a leaf dependency that only knows about its
+    own tools and the Anthropic SDK. Check all import blocks in internal/agent/.

@@ -1,0 +1,12 @@
+[book]
+title = "Axiom Documentation"
+authors = ["Axiom Contributors"]
+description = "AI-driven behavioral tests for your codebase"
+language = "en"
+src = "src"
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "ayu"
+git-repository-url = "https://github.com/k15z/axiom"
+edit-url-template = "https://github.com/k15z/axiom/edit/main/docs/src/{path}"
