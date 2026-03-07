@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/k15z/axiom/internal/cache"
 	"github.com/k15z/axiom/internal/config"
 	"github.com/k15z/axiom/internal/discovery"
 	"github.com/k15z/axiom/internal/output"
@@ -64,7 +65,7 @@ func newRunCmd() *cobra.Command {
 
 			if dryRun {
 				repoRoot, _ := filepath.Abs(".")
-				statuses := runner.GetStatuses(tests, cfg.Cache.Dir, repoRoot)
+				statuses := runner.GetStatuses(tests, cfg.Cache.Dir, repoRoot, cache.HashConfig(cfg.Model, cfg.Agent.MaxIterations, cfg.Agent.MaxTokens))
 				if filter != "" {
 					var filtered []types.TestStatus
 					for _, s := range statuses {
