@@ -43,6 +43,10 @@ test_double_finalization_prevention:
 |-------|----------|-------------|
 | `on` | No | Glob patterns that serve as both the cache trigger and a starting hint for the agent. If omitted, the test always runs. |
 | `condition` | **Yes** | Plain-English assertion about the code. The agent explores the codebase and determines pass/fail. |
+| `tags` | No | List of tags for filtering with `--tag` (e.g. `tags: [security, auth]`). |
+| `model` | No | Override the model for this test (e.g. `model: claude-sonnet-4-20250514`). |
+| `timeout` | No | Per-test timeout in seconds (overrides global `agent.timeout`). |
+| `max_iterations` | No | Per-test max tool-use turns (overrides global `agent.max_iterations`). |
 
 ### How `on` works
 
@@ -64,18 +68,23 @@ Commands:
   init                  Initialize axiom in the current project
   run [test-name]       Run behavioral tests (optionally a single test by name)
   list                  List all tests and their cached status
+  show <test-name>      Show cached result and reasoning for a test
+  validate              Lint test YAML files for common issues
   cache clear           Clear the cache, forcing all tests to re-run
 
 Flags (run):
   -a, --all                Run all tests, ignoring cache
   -f, --filter string      Run tests matching a glob pattern (e.g. "test_auth*")
+  -t, --tag string         Run tests matching any of the given tags (comma-separated)
   -d, --dir string         Path to test directory (default: .axiom/)
   -v, --verbose            Show full agent reasoning for all tests
   -m, --model string       LLM model to use (overrides config)
-  -c, --concurrency int    Number of tests to run in parallel (default: 1)
+  -c, --concurrency int    Number of tests to run in parallel (0 = auto)
   -b, --bail               Stop on first failure
       --json               Output results as JSON (for CI)
   -w, --watch              Watch for file changes and re-run affected tests
+      --retries int        Re-run failed tests up to N times; mark as flaky if a retry passes
+      --dry-run            Preview which tests would run and estimate token cost
 ```
 
 ### CI Usage
