@@ -8,7 +8,7 @@ import (
 
 func TestNew_EmptyCache(t *testing.T) {
 	dir := t.TempDir()
-	c := New(dir)
+	c := New(dir, "")
 	if _, ok := c.GetEntry("missing"); ok {
 		t.Error("expected GetEntry on empty cache to return ok=false")
 	}
@@ -16,7 +16,7 @@ func TestNew_EmptyCache(t *testing.T) {
 
 func TestUpdate_GetEntry(t *testing.T) {
 	dir := t.TempDir()
-	c := New(dir)
+	c := New(dir, "")
 
 	hashes := map[string]string{"main.go": "abc123"}
 	c.Update("my-test", "pass", hashes, "all good")
@@ -41,7 +41,7 @@ func TestUpdate_GetEntry(t *testing.T) {
 
 func TestUpdate_LastWriteWins(t *testing.T) {
 	dir := t.TempDir()
-	c := New(dir)
+	c := New(dir, "")
 	c.Update("t", "pass", nil, "first")
 	c.Update("t", "fail", nil, "second")
 
@@ -53,7 +53,7 @@ func TestUpdate_LastWriteWins(t *testing.T) {
 
 func TestSaveLoad_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	c := New(dir)
+	c := New(dir, "")
 	c.Update("alpha", "pass", map[string]string{"a.go": "h1"}, "ok")
 	c.Update("beta", "fail", nil, "nope")
 
@@ -61,7 +61,7 @@ func TestSaveLoad_RoundTrip(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	c2, err := Load(dir)
+	c2, err := Load(dir, "")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestSaveLoad_RoundTrip(t *testing.T) {
 
 func TestLoad_MissingFile(t *testing.T) {
 	dir := t.TempDir()
-	c, err := Load(dir)
+	c, err := Load(dir, "")
 	if err != nil {
 		t.Fatalf("Load on missing file should succeed, got: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestLoad_CorruptedJSON(t *testing.T) {
 	if err := os.WriteFile(path, []byte("not-json{{{{"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	c, err := Load(dir)
+	c, err := Load(dir, "")
 	if err != nil {
 		t.Fatalf("Load with corrupted JSON should not error, got: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestLoad_CorruptedJSON(t *testing.T) {
 
 func TestClear(t *testing.T) {
 	dir := t.TempDir()
-	c := New(dir)
+	c := New(dir, "")
 	c.Update("x", "pass", nil, "")
 	if err := c.Save(); err != nil {
 		t.Fatal(err)
@@ -127,7 +127,7 @@ func TestClear(t *testing.T) {
 	}
 
 	// After clear, Load should return an empty cache
-	c2, err := Load(dir)
+	c2, err := Load(dir, "")
 	if err != nil {
 		t.Fatalf("Load after Clear: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestClear(t *testing.T) {
 
 func TestClear_NoCacheFile(t *testing.T) {
 	dir := t.TempDir()
-	c := New(dir)
+	c := New(dir, "")
 	// Clear on a non-existent file should return an error (os.Remove fails)
 	err := c.Clear()
 	if err == nil {
