@@ -2,6 +2,69 @@ package agent
 
 import "testing"
 
+func TestShouldInjectBudgetHint(t *testing.T) {
+	tests := []struct {
+		name         string
+		inputTokens  int
+		outputTokens int
+		maxTokens    int
+		want         bool
+	}{
+		{
+			name:         "well under budget",
+			inputTokens:  1000,
+			outputTokens: 500,
+			maxTokens:    10000,
+			want:         false,
+		},
+		{
+			name:         "exactly at 75% threshold",
+			inputTokens:  15000,
+			outputTokens: 7500,
+			maxTokens:    10000,
+			want:         true, // 22500 >= 30000*3/4 = 22500
+		},
+		{
+			name:         "over 75% threshold",
+			inputTokens:  20000,
+			outputTokens: 5000,
+			maxTokens:    10000,
+			want:         true,
+		},
+		{
+			name:         "just under 75% threshold",
+			inputTokens:  15000,
+			outputTokens: 7499,
+			maxTokens:    10000,
+			want:         false, // 22499 < 22500
+		},
+		{
+			name:         "zero maxTokens disables hint",
+			inputTokens:  5000,
+			outputTokens: 5000,
+			maxTokens:    0,
+			want:         false,
+		},
+		{
+			name:         "zero usage",
+			inputTokens:  0,
+			outputTokens: 0,
+			maxTokens:    10000,
+			want:         false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldInjectBudgetHint(tt.inputTokens, tt.outputTokens, tt.maxTokens)
+			if got != tt.want {
+				t.Errorf("shouldInjectBudgetHint(%d, %d, %d) = %v, want %v",
+					tt.inputTokens, tt.outputTokens, tt.maxTokens, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseVerdict(t *testing.T) {
 	tests := []struct {
 		name          string

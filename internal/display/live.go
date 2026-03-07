@@ -83,7 +83,37 @@ func (d *LiveDisplay) FinishTest(name string, passed, cached, skipped bool, dur 
 		s.done, s.passed, s.cached, s.skipped, s.duration = true, passed, cached, skipped, dur
 		d.completed++
 	}
+	if !tty {
+		d.printCIProgress(name, passed, cached, skipped, dur)
+	}
 	d.render()
+}
+
+// printCIProgress prints a one-line progress summary for non-TTY environments.
+func (d *LiveDisplay) printCIProgress(name string, passed, cached, skipped bool, dur time.Duration) {
+	var marker string
+	switch {
+	case cached:
+		marker = "○"
+	case skipped:
+		marker = "○"
+	case passed:
+		marker = "✓"
+	default:
+		marker = "✗"
+	}
+
+	var detail string
+	switch {
+	case cached:
+		detail = "(cached)"
+	case skipped:
+		detail = "(skipped)"
+	default:
+		detail = fmt.Sprintf("(%.1fs)", dur.Seconds())
+	}
+
+	fmt.Fprintf(os.Stderr, "  [%d/%d] %s %s %s\n", d.completed, d.total, marker, name, detail)
 }
 
 func (d *LiveDisplay) Close() {

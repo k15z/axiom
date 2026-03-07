@@ -52,6 +52,20 @@ or
 VERDICT: FAIL
 <brief reasoning explaining what's missing or wrong>`
 
+const tokenBudgetHint = "You are running low on your token budget. Please state your verdict now using the VERDICT: PASS or VERDICT: FAIL format, with brief reasoning."
+
+// shouldInjectBudgetHint returns true when total token usage has reached >=75%
+// of the estimated budget. The budget estimate is maxTokens * 3 to account for
+// both input (~2x) and output (~1x) token usage.
+func shouldInjectBudgetHint(inputTokens, outputTokens, maxTokens int) bool {
+	if maxTokens <= 0 {
+		return false
+	}
+	totalTokens := inputTokens + outputTokens
+	budget := maxTokens * 3
+	return totalTokens >= budget*3/4
+}
+
 // RunOptions configures the agent loop.
 type RunOptions struct {
 	MaxIterations int
@@ -99,6 +113,8 @@ func Run(ctx context.Context, apiKey string, model string, condition string, onG
 		Tools:     tools,
 	}
 
+	budgetHintInjected := false
+
 	maxIterations := opts.MaxIterations
 	for i := 0; i < maxIterations; i++ {
 		progress(Event{Kind: "thinking", Message: fmt.Sprintf("thinking (turn %d/%d)", i+1, maxIterations)})
@@ -130,6 +146,15 @@ func Run(ctx context.Context, apiKey string, model string, condition string, onG
 
 		if len(toolResults) > 0 {
 			messages = append(messages, resp.ToParam())
+
+			// Inject a budget hint when the agent has used >=75% of its
+			// total token budget and is still making tool calls. This
+			// nudges the model to conclude rather than hard-cutting.
+			if !budgetHintInjected && shouldInjectBudgetHint(usage.InputTokens, usage.OutputTokens, opts.MaxTokens) {
+				budgetHintInjected = true
+				toolResults = append(toolResults, anthropic.NewTextBlock(tokenBudgetHint))
+			}
+
 			messages = append(messages, anthropic.NewUserMessage(toolResults...))
 			continue
 		}
