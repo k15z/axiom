@@ -79,6 +79,37 @@ Flags (run):
 
 ### CI Usage
 
+The easiest way to run axiom in CI is with the reusable GitHub Action:
+
+```yaml
+# .github/workflows/axiom.yml
+name: Axiom Tests
+on: [pull_request]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  axiom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: k15z/axiom@main
+        with:
+          api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+This installs axiom, restores the cache, runs tests, posts a PR comment with results, and fails the step if any tests fail.
+
+For manual setup or other CI systems, run axiom directly:
+
+```yaml
+- name: Run axiom tests
+  run: axiom run --all
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
 Exit codes:
 
 | Code | Meaning |
@@ -86,16 +117,6 @@ Exit codes:
 | `0` | All tests passed (or cached/skipped) |
 | `1` | One or more tests failed |
 | `2` | Configuration or setup error (missing API key, bad YAML, test dir not found) |
-
-This lets CI distinguish "tests failed" from "axiom is broken":
-
-```yaml
-# GitHub Actions
-- name: Run axiom tests
-  run: axiom run --all
-  env:
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-```
 
 In non-TTY environments (CI), axiom prints per-test progress lines to stderr as tests complete, plus a greppable summary line: `axiom: 8 passed, 1 failed, 1 cached`.
 
