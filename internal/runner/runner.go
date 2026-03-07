@@ -63,7 +63,7 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 	var cacheMu sync.Mutex
 	if cfg.Cache.Enabled && !opts.All {
 		var err error
-		configHash := cache.HashConfig(cfg.Model, cfg.Agent.MaxIterations, cfg.Agent.MaxTokens)
+		configHash := cache.HashConfig(cfg.Model, cfg.Agent.MaxIterations, cfg.Agent.MaxTokens, cfg.Provider, cfg.BaseURL)
 		c, err = cache.Load(cfg.Cache.Dir, configHash)
 		if err != nil {
 			c = cache.New(cfg.Cache.Dir, configHash)
@@ -138,14 +138,20 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 		idx := i
 		t := test
 
+		exec := &testExecutor{
+			cfg:       cfg,
+			repoRoot:  repoRoot,
+			noteStore: noteStore,
+			notesMu:   &notesMu,
+			throttle:  throttle,
+			retries:   opts.Retries,
+		}
+
 		wg.Add(1)
 		sem <- struct{}{}
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-
-			// Rate-limit backoff: pause before starting if throttle is active
-			throttle.Wait()
 
 			// Check if bailed before starting
 			select {
@@ -171,7 +177,6 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 					status = "→ " + e.Message
 				case "text":
 					textBuf.WriteString(e.Message)
-					// Show last line of accumulated text as status
 					s := textBuf.String()
 					s = strings.ReplaceAll(s, "\n", " ")
 					s = strings.TrimSpace(s)
@@ -185,111 +190,7 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 				live.Update(t.Name, status)
 			}
 
-			start := time.Now()
-
-			// Per-test config overrides
-			testModel := cfg.Model
-			if t.Model != "" {
-				testModel = t.Model
-			}
-			testTimeout := cfg.Agent.Timeout
-			if t.Timeout > 0 {
-				testTimeout = t.Timeout
-			}
-			testMaxIter := cfg.Agent.MaxIterations
-			if t.MaxIterations > 0 {
-				testMaxIter = t.MaxIterations
-			}
-
-			// Per-test timeout
-			runCtx := ctx
-			if testTimeout > 0 {
-				var timeoutCancel context.CancelFunc
-				runCtx, timeoutCancel = context.WithTimeout(ctx, time.Duration(testTimeout)*time.Second)
-				defer timeoutCancel()
-			}
-
-			// Create provider per-test so streaming progress is routed correctly
-			var textProgress provider.ProgressFunc
-			if cfg.Provider == "" || cfg.Provider == "anthropic" {
-				textProgress = func(text string) {
-					progress(agent.Event{Kind: "text", Message: text})
-				}
-			}
-			p := newProvider(cfg, textProgress)
-
-			// Build prior notes context for the agent
-			notesMu.Lock()
-			priorNotes := buildPriorNotes(noteStore, t.Name, repoRoot)
-			notesMu.Unlock()
-
-			result, err := agent.Run(runCtx, p, testModel, t.Condition, t.On, repoRoot, progress, agent.RunOptions{
-				MaxIterations: testMaxIter,
-				MaxTokens:     cfg.Agent.MaxTokens,
-				ToolTimeout:   time.Duration(cfg.Agent.ToolTimeout) * time.Second,
-				PriorNotes:    priorNotes,
-			})
-			duration := time.Since(start)
-
-			tr := types.TestResult{Test: t, Duration: duration}
-			tr.Usage = types.Usage{
-				InputTokens:  result.Usage.InputTokens,
-				OutputTokens: result.Usage.OutputTokens,
-				APICalls:     result.Usage.APICalls,
-			}
-			if err != nil {
-				tr.Errored = true
-				tr.Reasoning = "Agent error: " + err.Error()
-				if isRateLimitErr(err) {
-					throttle.Signal()
-				}
-			} else {
-				tr.Passed = result.Passed
-				tr.Reasoning = result.Reasoning
-			}
-
-			// Save agent notes for future runs
-			if result.Notes != "" {
-				notesMu.Lock()
-				noteStore.UpdateTestNotes(t.Name, result.Notes, result.NoteFiles, repoRoot)
-				notesMu.Unlock()
-			}
-
-			// Retry failed tests. If a retry passes, mark as flaky.
-			// Skip retries for infrastructure errors (API failures, timeouts).
-			if !tr.Passed && !tr.Errored && opts.Retries > 0 {
-				for retry := 1; retry <= opts.Retries; retry++ {
-					select {
-					case <-ctx.Done():
-						break
-					default:
-					}
-					live.Update(t.Name, fmt.Sprintf("retrying (%d/%d)…", retry, opts.Retries))
-					retryResult, retryErr := agent.Run(runCtx, p, testModel, t.Condition, t.On, repoRoot, progress, agent.RunOptions{
-						MaxIterations: testMaxIter,
-						MaxTokens:     cfg.Agent.MaxTokens,
-						ToolTimeout:   time.Duration(cfg.Agent.ToolTimeout) * time.Second,
-						PriorNotes:    priorNotes,
-					})
-					tr.Duration = time.Since(start)
-					tr.Usage.InputTokens += retryResult.Usage.InputTokens
-					tr.Usage.OutputTokens += retryResult.Usage.OutputTokens
-					tr.Usage.APICalls += retryResult.Usage.APICalls
-					tr.Retries = retry
-					if retryErr == nil && retryResult.Passed {
-						tr.Passed = true
-						tr.Flaky = true
-						tr.Reasoning = retryResult.Reasoning
-						break
-					}
-					if retryErr != nil {
-						tr.Reasoning = "Agent error: " + retryErr.Error()
-					} else {
-						tr.Reasoning = retryResult.Reasoning
-					}
-				}
-			}
-
+			tr := exec.execute(ctx, t, progress)
 			results[idx] = tr
 
 			live.FinishTest(t.Name, tr.Passed, false, false, tr.Errored, tr.Duration)
@@ -337,18 +238,129 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 	return out, nil
 }
 
+// testExecutor handles the execution of a single test, including agent
+// invocation, retries, notes management, and result construction.
+type testExecutor struct {
+	cfg       config.Config
+	repoRoot  string
+	noteStore *notes.Store
+	notesMu   *sync.Mutex
+	throttle  *Throttle
+	retries   int
+}
+
+// execute runs a single test and returns its result.
+func (e *testExecutor) execute(ctx context.Context, t discovery.Test, progress agent.ProgressFunc) types.TestResult {
+	e.throttle.Wait()
+
+	start := time.Now()
+
+	// Per-test config overrides
+	testModel := e.cfg.Model
+	if t.Model != "" {
+		testModel = t.Model
+	}
+	testTimeout := e.cfg.Agent.Timeout
+	if t.Timeout > 0 {
+		testTimeout = t.Timeout
+	}
+	testMaxIter := e.cfg.Agent.MaxIterations
+	if t.MaxIterations > 0 {
+		testMaxIter = t.MaxIterations
+	}
+
+	// Per-test timeout
+	runCtx := ctx
+	if testTimeout > 0 {
+		var timeoutCancel context.CancelFunc
+		runCtx, timeoutCancel = context.WithTimeout(ctx, time.Duration(testTimeout)*time.Second)
+		defer timeoutCancel()
+	}
+
+	// Create provider per-test so streaming progress is routed correctly
+	var textProgress provider.ProgressFunc
+	if e.cfg.Provider == "" || e.cfg.Provider == "anthropic" {
+		textProgress = func(text string) {
+			progress(agent.Event{Kind: "text", Message: text})
+		}
+	}
+	p := newProvider(e.cfg, textProgress)
+
+	// Build prior notes context for the agent
+	e.notesMu.Lock()
+	priorNotes := buildPriorNotes(e.noteStore, t.Name, e.repoRoot)
+	e.notesMu.Unlock()
+
+	agentOpts := agent.RunOptions{
+		MaxIterations: testMaxIter,
+		MaxTokens:     e.cfg.Agent.MaxTokens,
+		ToolTimeout:   time.Duration(e.cfg.Agent.ToolTimeout) * time.Second,
+		PriorNotes:    priorNotes,
+	}
+
+	result, err := agent.Run(runCtx, p, testModel, t.Condition, t.On, e.repoRoot, progress, agentOpts)
+	duration := time.Since(start)
+
+	tr := types.TestResult{Test: t, Duration: duration}
+	tr.Usage = types.Usage{
+		InputTokens:  result.Usage.InputTokens,
+		OutputTokens: result.Usage.OutputTokens,
+		APICalls:     result.Usage.APICalls,
+	}
+	if err != nil {
+		tr.Errored = true
+		tr.Reasoning = "Agent error: " + err.Error()
+		if provider.IsRateLimitError(err) {
+			e.throttle.Signal()
+		}
+	} else {
+		tr.Passed = result.Passed
+		tr.Reasoning = result.Reasoning
+	}
+
+	// Save agent notes for future runs
+	if result.Notes != "" {
+		e.notesMu.Lock()
+		e.noteStore.UpdateTestNotes(t.Name, result.Notes, result.NoteFiles, e.repoRoot)
+		e.notesMu.Unlock()
+	}
+
+	// Retry failed tests. If a retry passes, mark as flaky.
+	// Skip retries for infrastructure errors (API failures, timeouts).
+	if !tr.Passed && !tr.Errored && e.retries > 0 {
+		for retry := 1; retry <= e.retries; retry++ {
+			select {
+			case <-ctx.Done():
+				break
+			default:
+			}
+			progress(agent.Event{Kind: "thinking", Message: fmt.Sprintf("retrying (%d/%d)…", retry, e.retries)})
+			retryResult, retryErr := agent.Run(runCtx, p, testModel, t.Condition, t.On, e.repoRoot, progress, agentOpts)
+			tr.Duration = time.Since(start)
+			tr.Usage.InputTokens += retryResult.Usage.InputTokens
+			tr.Usage.OutputTokens += retryResult.Usage.OutputTokens
+			tr.Usage.APICalls += retryResult.Usage.APICalls
+			tr.Retries = retry
+			if retryErr == nil && retryResult.Passed {
+				tr.Passed = true
+				tr.Flaky = true
+				tr.Reasoning = retryResult.Reasoning
+				break
+			}
+			if retryErr != nil {
+				tr.Reasoning = "Agent error: " + retryErr.Error()
+			} else {
+				tr.Reasoning = retryResult.Reasoning
+			}
+		}
+	}
+
+	return tr
+}
+
 // newThrottle creates the rate-limit throttle for a run.
 // Declared as a variable so tests can override it with a fast throttle.
 var newThrottle = NewThrottle
-
-// isRateLimitErr checks if an error indicates a rate limit (429) response.
-func isRateLimitErr(err error) bool {
-	if err == nil {
-		return false
-	}
-	s := strings.ToLower(err.Error())
-	return strings.Contains(s, "429") || strings.Contains(s, "rate limit") || strings.Contains(s, "rate_limit")
-}
 
 // ClearCache deletes the test cache. Used by the cache clear command.
 func ClearCache(cacheDir string) error {

@@ -200,4 +200,25 @@ func TestHashConfig(t *testing.T) {
 	if len(h1) != 64 {
 		t.Errorf("expected 64-char hex SHA-256, got %d chars", len(h1))
 	}
+
+	// Extra params (provider, base_url) change the hash
+	h5 := HashConfig("claude-haiku-4-5-20251001", 30, 10000, "anthropic", "")
+	h6 := HashConfig("claude-haiku-4-5-20251001", 30, 10000, "openai", "")
+	h7 := HashConfig("claude-haiku-4-5-20251001", 30, 10000, "openai", "http://localhost:11434/v1")
+
+	if h1 == h5 {
+		t.Error("adding provider extra should produce different hash")
+	}
+	if h5 == h6 {
+		t.Error("different provider should produce different hash")
+	}
+	if h6 == h7 {
+		t.Error("different base_url should produce different hash")
+	}
+
+	// Same extra params produce same hash
+	h8 := HashConfig("claude-haiku-4-5-20251001", 30, 10000, "anthropic", "")
+	if h5 != h8 {
+		t.Error("same extra params should produce same hash")
+	}
 }

@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -10,11 +12,15 @@ import (
 	"github.com/k15z/axiom/internal/config"
 	"github.com/k15z/axiom/internal/discovery"
 	"github.com/k15z/axiom/internal/runner"
+	"github.com/k15z/axiom/internal/types"
 	"github.com/spf13/cobra"
 )
 
 func newListCmd() *cobra.Command {
-	var dir string
+	var (
+		dir      string
+		jsonFlag bool
+	)
 
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -35,8 +41,12 @@ func newListCmd() *cobra.Command {
 			}
 
 			repoRoot, _ := filepath.Abs(".")
-			configHash := cache.HashConfig(cfg.Model, cfg.Agent.MaxIterations, cfg.Agent.MaxTokens)
+			configHash := cache.HashConfig(cfg.Model, cfg.Agent.MaxIterations, cfg.Agent.MaxTokens, cfg.Provider, cfg.BaseURL)
 			statuses := runner.GetStatuses(tests, cfg.Cache.Dir, repoRoot, configHash)
+
+			if jsonFlag {
+				return printListJSON(statuses)
+			}
 
 			gray := color.New(color.FgHiBlack)
 			green := color.New(color.FgGreen)
@@ -70,11 +80,39 @@ func newListCmd() *cobra.Command {
 				}
 				c.Printf("[%s]\n", label)
 			}
+
 			fmt.Println()
+			gray.Printf("  %d test(s)\n\n", len(statuses))
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVarP(&dir, "dir", "d", "", "Path to test directory")
+	cmd.Flags().BoolVar(&jsonFlag, "json", false, "Output as JSON")
 	return cmd
+}
+
+func printListJSON(statuses []types.TestStatus) error {
+	type jsonEntry struct {
+		Name   string   `json:"name"`
+		File   string   `json:"file"`
+		Status string   `json:"status"`
+		Tags   []string `json:"tags,omitempty"`
+		Globs  []string `json:"on,omitempty"`
+	}
+
+	var out []jsonEntry
+	for _, s := range statuses {
+		out = append(out, jsonEntry{
+			Name:   s.Test.Name,
+			File:   s.Test.SourceFile,
+			Status: s.Status,
+			Tags:   s.Test.Tags,
+			Globs:  s.Test.On,
+		})
+	}
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
 }

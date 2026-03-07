@@ -1,6 +1,6 @@
 # Examples
 
-These examples are real tests from axiom's own codebase (in `.axiom/`). They demonstrate patterns you can adapt for your projects.
+These examples demonstrate patterns you can adapt for your projects. The first section shows Go examples from axiom's own codebase. Cross-language examples for Python, TypeScript, Java, and Rust follow.
 
 ## Architecture Tests
 
@@ -152,6 +152,200 @@ test_no_circular_imports:
     Each package's imports (found in the import blocks of its .go files)
     should form a DAG. For example, if package A imports package B, then
     package B must not import package A, either directly or transitively.
+```
+
+## Python Examples
+
+### Django/Flask Authentication
+
+```yaml
+test_views_require_authentication:
+  tags: [security]
+  on:
+    - src/views/**/*.py
+    - src/routes/**/*.py
+  condition: >
+    All view functions or route handlers that access user data must
+    require authentication. They should use @login_required,
+    @auth_required, or equivalent decorators, or check
+    request.user.is_authenticated before proceeding. Public endpoints
+    (health checks, login, registration) are exempt.
+```
+
+### SQL Injection Prevention
+
+```yaml
+test_no_raw_sql_interpolation:
+  tags: [security]
+  on:
+    - src/**/*.py
+  condition: >
+    All database queries must use parameterized statements or the ORM
+    query builder. No raw string interpolation (f-strings, .format(),
+    or % formatting) should be used to construct SQL queries. Look for
+    patterns like f"SELECT ... {variable}", "SELECT ...".format(), or
+    "SELECT ... %s" % variable in calls to cursor.execute(), raw(),
+    or similar database functions.
+```
+
+### Async Resource Cleanup
+
+```yaml
+test_async_resources_cleaned_up:
+  tags: [reliability]
+  on:
+    - src/**/*.py
+  condition: >
+    All async context managers (aiohttp sessions, database connections,
+    file handles) must be used with "async with" to ensure cleanup on
+    exit. There should be no bare .close() calls without a try/finally
+    or context manager wrapping them.
+```
+
+## JavaScript / TypeScript Examples
+
+### Express Middleware Ordering
+
+```yaml
+test_auth_middleware_before_routes:
+  tags: [security]
+  on:
+    - src/app.ts
+    - src/middleware/**/*.ts
+    - src/routes/**/*.ts
+  condition: >
+    Authentication middleware must be registered before route handlers
+    in the Express app setup. The auth middleware should run on all
+    routes except explicitly whitelisted public paths (health check,
+    login, public API docs). No route handler should access req.user
+    without auth middleware running first.
+```
+
+### No Secrets in Client Bundles
+
+```yaml
+test_no_secrets_in_client_code:
+  tags: [security]
+  on:
+    - src/client/**/*.ts
+    - src/client/**/*.tsx
+    - src/frontend/**/*.ts
+  condition: >
+    Client-side code must not contain API keys, secrets, or private
+    configuration values. Check for hardcoded strings that look like
+    API keys, any imports from server-only config modules, and direct
+    references to process.env (which should only appear in server code
+    or build-time config).
+```
+
+### React Hook Dependencies
+
+```yaml
+test_useeffect_has_dependencies:
+  tags: [code-quality]
+  on:
+    - src/components/**/*.tsx
+    - src/hooks/**/*.ts
+  condition: >
+    All useEffect calls must include a dependency array (the second
+    argument). An empty array [] is acceptable for mount-only effects.
+    Missing the dependency array entirely causes the effect to run on
+    every render, which is almost always a bug.
+```
+
+## Java Examples
+
+### Spring Controller Authorization
+
+```yaml
+test_controllers_have_authorization:
+  tags: [security]
+  on:
+    - src/main/java/**/controller/**/*.java
+  condition: >
+    All REST controller methods that modify data (POST, PUT, DELETE,
+    PATCH) must have authorization annotations (@PreAuthorize,
+    @Secured, or @RolesAllowed). GET endpoints that return sensitive
+    data should also be protected. Only health check and public info
+    endpoints are exempt.
+```
+
+### No Field Injection
+
+```yaml
+test_no_field_injection:
+  tags: [architecture]
+  on:
+    - src/main/java/**/*.java
+  condition: >
+    Spring beans must use constructor injection, not field injection.
+    There should be no @Autowired annotations on fields. Dependencies
+    should be declared as final constructor parameters, with
+    @RequiredArgsConstructor or an explicit constructor. This ensures
+    immutability and makes dependencies explicit for testing.
+```
+
+### Exception Handling Consistency
+
+```yaml
+test_controllers_use_exception_handler:
+  tags: [error-handling]
+  on:
+    - src/main/java/**/controller/**/*.java
+    - src/main/java/**/exception/**/*.java
+  condition: >
+    Controllers should not catch exceptions and manually build error
+    responses. Instead, exceptions should propagate to a
+    @ControllerAdvice / @ExceptionHandler that maps them to
+    consistent error response DTOs. This ensures uniform error format
+    across all endpoints.
+```
+
+## Rust Examples
+
+### Unsafe Code Boundaries
+
+```yaml
+test_unsafe_is_contained:
+  tags: [security]
+  on:
+    - src/**/*.rs
+  condition: >
+    Unsafe blocks must be confined to dedicated modules or functions
+    with "unsafe" or "unchecked" in their name. No unsafe code should
+    appear in business logic, request handlers, or high-level
+    orchestration code. Each unsafe block must have a SAFETY comment
+    explaining why it is sound.
+```
+
+### Error Handling with Result Types
+
+```yaml
+test_no_unwrap_in_production_code:
+  tags: [reliability]
+  on:
+    - src/**/*.rs
+  condition: >
+    Production code (everything outside tests/ and examples/) must not
+    use .unwrap() or .expect() on Result or Option types, except in
+    cases where the value is statically guaranteed to be present (e.g.,
+    compile-time constants, regex patterns). All fallible operations
+    should use the ? operator or explicit match/if-let handling.
+```
+
+### Send + Sync Safety
+
+```yaml
+test_shared_state_is_sync:
+  tags: [concurrency]
+  on:
+    - src/**/*.rs
+  condition: >
+    All types stored in shared application state (e.g., passed to
+    actix-web's App::app_data or axum's Extension) must implement
+    Send + Sync. Shared mutable state must use Arc<Mutex<T>>,
+    Arc<RwLock<T>>, or an atomic type. There should be no raw
+    RefCell or Rc in shared state.
 ```
 
 ## Patterns for Good Tests

@@ -102,9 +102,9 @@ func TestIsRateLimitErr(t *testing.T) {
 		{fmt.Errorf("Rate Limit exceeded"), true},
 	}
 	for _, tt := range tests {
-		got := isRateLimitErr(tt.err)
+		got := provider.IsRateLimitError(tt.err)
 		if got != tt.want {
-			t.Errorf("isRateLimitErr(%v) = %v, want %v", tt.err, got, tt.want)
+			t.Errorf("IsRateLimitError(%v) = %v, want %v", tt.err, got, tt.want)
 		}
 	}
 }

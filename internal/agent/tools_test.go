@@ -1,6 +1,9 @@
 package agent
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,7 +37,7 @@ func TestToolTree(t *testing.T) {
 	}
 
 	t.Run("basic tree", func(t *testing.T) {
-		result, isErr := toolTree(".", 3, root)
+		result, isErr := toolTree(context.Background(), ".", 3, root)
 		if isErr {
 			t.Fatalf("unexpected error: %s", result)
 		}
@@ -51,7 +54,7 @@ func TestToolTree(t *testing.T) {
 	})
 
 	t.Run("depth limit", func(t *testing.T) {
-		result, isErr := toolTree(".", 1, root)
+		result, isErr := toolTree(context.Background(), ".", 1, root)
 		if isErr {
 			t.Fatalf("unexpected error: %s", result)
 		}
@@ -65,7 +68,7 @@ func TestToolTree(t *testing.T) {
 	})
 
 	t.Run("subdirectory", func(t *testing.T) {
-		result, isErr := toolTree("src", 3, root)
+		result, isErr := toolTree(context.Background(), "src", 3, root)
 		if isErr {
 			t.Fatalf("unexpected error: %s", result)
 		}
@@ -81,7 +84,7 @@ func TestToolTree(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			os.WriteFile(filepath.Join(bigDir, strings.Repeat("a", 3)+string(rune('a'+i/26))+string(rune('a'+i%26))+".txt"), []byte("test"), 0o644)
 		}
-		result, isErr := toolTree("big", 1, root)
+		result, isErr := toolTree(context.Background(), "big", 1, root)
 		if isErr {
 			t.Fatalf("unexpected error: %s", result)
 		}
@@ -91,20 +94,59 @@ func TestToolTree(t *testing.T) {
 	})
 
 	t.Run("path outside root", func(t *testing.T) {
-		_, isErr := toolTree("../../etc", 1, root)
+		_, isErr := toolTree(context.Background(), "../../etc", 1, root)
 		if !isErr {
 			t.Error("expected error for path outside root")
 		}
 	})
 
 	t.Run("default depth", func(t *testing.T) {
-		result, isErr := toolTree(".", 0, root)
+		result, isErr := toolTree(context.Background(), ".", 0, root)
 		if isErr {
 			t.Fatalf("unexpected error: %s", result)
 		}
 		// depth=0 should default to 3, showing nested content
 		if !strings.Contains(result, "button.go") {
 			t.Errorf("default depth should show nested files, got:\n%s", result)
+		}
+	})
+}
+
+func TestToolContextCancellation(t *testing.T) {
+	root := t.TempDir()
+	// Create some files so tools have work to do
+	for i := 0; i < 10; i++ {
+		os.WriteFile(filepath.Join(root, fmt.Sprintf("file%d.txt", i)), []byte("hello world\n"), 0o644)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	t.Run("grep respects cancelled context", func(t *testing.T) {
+		result, _ := toolGrep(ctx, "hello", "", root)
+		// With a cancelled context, grep should return quickly
+		// It may return partial results or no results, but should not hang
+		_ = result
+	})
+
+	t.Run("glob respects cancelled context", func(t *testing.T) {
+		result, _ := toolGlob(ctx, "**/*.txt", root)
+		_ = result
+	})
+
+	t.Run("tree respects cancelled context", func(t *testing.T) {
+		result, _ := toolTree(ctx, ".", 3, root)
+		_ = result
+	})
+
+	t.Run("ExecuteTool returns timeout error", func(t *testing.T) {
+		input, _ := json.Marshal(map[string]any{"pattern": "hello"})
+		result, isErr := ExecuteTool(ctx, "grep", input, root, 0)
+		if !isErr {
+			t.Error("expected error for cancelled context")
+		}
+		if !strings.Contains(result, "timed out") {
+			t.Errorf("expected timeout message, got: %s", result)
 		}
 	})
 }

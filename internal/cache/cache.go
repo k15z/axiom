@@ -29,9 +29,12 @@ type Cache struct {
 }
 
 // HashConfig returns a SHA-256 digest of the agent config fields that affect verdicts.
-func HashConfig(model string, maxIterations, maxTokens int) string {
+func HashConfig(model string, maxIterations, maxTokens int, extra ...string) string {
 	h := sha256.New()
 	fmt.Fprintf(h, "%s:%d:%d", model, maxIterations, maxTokens)
+	for _, e := range extra {
+		fmt.Fprintf(h, ":%s", e)
+	}
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -56,7 +59,8 @@ func Load(dir string, configHash string) (*Cache, error) {
 	}
 
 	if err := json.Unmarshal(data, &c.entries); err != nil {
-		// Corrupted cache — start fresh
+		// Corrupted cache — start fresh but warn the user
+		fmt.Fprintf(os.Stderr, "warning: cache file corrupted, starting fresh (%s)\n", path)
 		c.entries = make(map[string]Entry)
 	}
 
@@ -136,6 +140,16 @@ func (c *Cache) Clear() error {
 func (c *Cache) GetEntry(testName string) (Entry, bool) {
 	e, ok := c.entries[testName]
 	return e, ok
+}
+
+// Entries returns all cache entries. Used by cache info command.
+func (c *Cache) Entries() map[string]Entry {
+	return c.entries
+}
+
+// FilePath returns the path to the cache file on disk.
+func (c *Cache) FilePath() string {
+	return c.filePath()
 }
 
 func (c *Cache) filePath() string {

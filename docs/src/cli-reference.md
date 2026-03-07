@@ -28,6 +28,7 @@ If a test name is provided as a positional argument, only that test runs. This o
 | `--dry-run` | | `false` | Preview which tests would run and estimate token cost |
 | `--watch` | `-w` | `false` | Watch for file changes and re-run affected tests |
 | `--strict` | | `false` | Treat flaky tests (passed on retry) as failures |
+| `--quiet` | `-q` | `false` | Suppress full output, only emit CI summary line to stderr |
 | `--provider` | `-p` | | Override the LLM provider: `anthropic`, `openai`, or `gemini` |
 
 ### Examples
@@ -65,6 +66,9 @@ axiom run --model claude-sonnet-4-6
 
 # Watch for file changes and re-run affected tests
 axiom run --watch
+
+# Suppress output, just get exit code (for CI)
+axiom run --quiet
 ```
 
 ### Exit Codes
@@ -122,8 +126,9 @@ axiom list [flags]
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--dir` | `-d` | | Path to test directory |
+| `--json` | | `false` | Output as JSON |
 
-Shows each test with its status: `pending`, `cached (pass)`, `cached (fail)`, `stale (pass)`, `stale (fail)`.
+Shows each test with its status: `pending`, `cached (pass)`, `cached (fail)`, `stale (pass)`, `stale (fail)`. Includes a total test count.
 
 ## axiom show
 
@@ -189,4 +194,14 @@ Clear the test cache, forcing all tests to re-run.
 
 ```
 axiom cache clear
+```
+
+Respects `cache.dir` from `axiom.yml` if configured.
+
+## axiom cache info
+
+Show cache statistics: entry count, file size, oldest/newest entries, and per-test pass/fail breakdown.
+
+```
+axiom cache info
 ```

@@ -35,6 +35,7 @@ func newRunCmd() *cobra.Command {
 		dryRun      bool
 		watchMode   bool
 		strict      bool
+		quiet       bool
 	)
 
 	cmd := &cobra.Command{
@@ -96,7 +97,7 @@ func newRunCmd() *cobra.Command {
 
 			if dryRun {
 				repoRoot, _ := filepath.Abs(".")
-				statuses := runner.GetStatuses(tests, cfg.Cache.Dir, repoRoot, cache.HashConfig(cfg.Model, cfg.Agent.MaxIterations, cfg.Agent.MaxTokens))
+				statuses := runner.GetStatuses(tests, cfg.Cache.Dir, repoRoot, cache.HashConfig(cfg.Model, cfg.Agent.MaxIterations, cfg.Agent.MaxTokens, cfg.Provider, cfg.BaseURL))
 				if filter != "" || tag != "" {
 					var filtered []types.TestStatus
 					for _, s := range statuses {
@@ -140,15 +141,17 @@ func newRunCmd() *cobra.Command {
 				outputFormat = "json"
 			}
 
-			switch outputFormat {
-			case "json":
-				if err := output.PrintJSON(results, cfg.Model); err != nil {
-					return err
+			if !quiet {
+				switch outputFormat {
+				case "json":
+					if err := output.PrintJSON(results, cfg.Model); err != nil {
+						return err
+					}
+				case "github":
+					output.PrintGitHub(results, cfg.Model)
+				default:
+					output.Print(results, cfg.Model, verbose)
 				}
-			case "github":
-				output.PrintGitHub(results, cfg.Model)
-			default:
-				output.Print(results, cfg.Model, verbose)
 			}
 
 			if output.HasFailures(results) {
@@ -179,6 +182,7 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview which tests would run vs be skipped and estimate token cost, without calling the API")
 	cmd.Flags().BoolVarP(&watchMode, "watch", "w", false, "Watch for file changes and re-run affected tests")
 	cmd.Flags().BoolVar(&strict, "strict", false, "Treat flaky tests (passed on retry) as failures")
+	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress full output, only emit CI summary line to stderr")
 
 	return cmd
 }

@@ -132,41 +132,27 @@ func ExecuteTool(ctx context.Context, name string, inputJSON json.RawMessage, re
 		defer cancel()
 	}
 
-	type toolResult struct {
-		output  string
-		isError bool
+	var out string
+	var isErr bool
+	switch name {
+	case "read_file":
+		out, isErr = toolReadFile(getString(input, "path"), getInt(input, "start_line"), getInt(input, "end_line"), repoRoot)
+	case "glob":
+		out, isErr = toolGlob(toolCtx, getString(input, "pattern"), repoRoot)
+	case "grep":
+		out, isErr = toolGrep(toolCtx, getString(input, "pattern"), getString(input, "glob"), repoRoot)
+	case "list_dir":
+		out, isErr = toolListDir(getString(input, "path"), repoRoot)
+	case "tree":
+		out, isErr = toolTree(toolCtx, getString(input, "path"), getInt(input, "depth"), repoRoot)
+	default:
+		out, isErr = fmt.Sprintf("unknown tool: %s", name), true
 	}
-	ch := make(chan toolResult, 1)
 
-	go func() {
-		var out string
-		var isErr bool
-		switch name {
-		case "read_file":
-			out, isErr = toolReadFile(getString(input, "path"), getInt(input, "start_line"), getInt(input, "end_line"), repoRoot)
-		case "glob":
-			out, isErr = toolGlob(getString(input, "pattern"), repoRoot)
-		case "grep":
-			out, isErr = toolGrep(getString(input, "pattern"), getString(input, "glob"), repoRoot)
-		case "list_dir":
-			out, isErr = toolListDir(getString(input, "path"), repoRoot)
-		case "tree":
-			out, isErr = toolTree(getString(input, "path"), getInt(input, "depth"), repoRoot)
-		default:
-			out, isErr = fmt.Sprintf("unknown tool: %s", name), true
-		}
-		ch <- toolResult{out, isErr}
-	}()
-
-	select {
-	case r := <-ch:
-		return r.output, r.isError
-	case <-toolCtx.Done():
-		// TODO: thread toolCtx into walk-heavy tools (toolGrep, toolTree) so
-		// they can bail early on cancellation. For now the goroutine continues
-		// until its I/O completes then writes to the buffered channel and is GC'd.
+	if toolCtx.Err() != nil && !isErr {
 		return fmt.Sprintf("tool %q timed out", name), true
 	}
+	return out, isErr
 }
 
 func getString(m map[string]any, key string) string {
@@ -237,7 +223,7 @@ func toolReadFile(path string, startLine, endLine int, root string) (string, boo
 	return truncate(b.String()), false
 }
 
-func toolGlob(pattern, root string) (string, bool) {
+func toolGlob(ctx context.Context, pattern, root string) (string, bool) {
 	// Validate the non-wildcard prefix using the shared safePath function.
 	// This rejects absolute paths, .. traversal, and anything outside the repo root.
 	prefix := pattern
@@ -256,6 +242,9 @@ func toolGlob(pattern, root string) (string, bool) {
 	// Use WalkDir for ** support
 	rootAbs, _ := filepath.Abs(root)
 	filepath.WalkDir(rootAbs, func(path string, d fs.DirEntry, err error) error {
+		if ctx.Err() != nil {
+			return fs.SkipAll
+		}
 		if err != nil {
 			return nil
 		}
@@ -285,7 +274,7 @@ func toolGlob(pattern, root string) (string, bool) {
 	return truncate(strings.Join(matches, "\n")), false
 }
 
-func toolGrep(pattern, globFilter, root string) (string, bool) {
+func toolGrep(ctx context.Context, pattern, globFilter, root string) (string, bool) {
 	// The glob filter is a filename-only pattern (e.g. "*.go"); reject path traversal
 	if strings.Contains(globFilter, "..") || strings.HasPrefix(globFilter, "/") {
 		return fmt.Sprintf("invalid glob filter %q: must be a filename pattern, not a path", globFilter), true
@@ -303,6 +292,9 @@ func toolGrep(pattern, globFilter, root string) (string, bool) {
 
 	var b strings.Builder
 	filepath.WalkDir(rootAbs, func(path string, d fs.DirEntry, err error) error {
+		if ctx.Err() != nil {
+			return fs.SkipAll
+		}
 		if err != nil {
 			return nil
 		}
@@ -333,6 +325,9 @@ func toolGrep(pattern, globFilter, root string) (string, bool) {
 		scanner := bufio.NewScanner(f)
 		lineNum := 0
 		for scanner.Scan() {
+			if ctx.Err() != nil {
+				break
+			}
 			lineNum++
 			line := scanner.Text()
 			if re.MatchString(line) {
@@ -383,7 +378,7 @@ const (
 	treeMaxEntriesTotal  = 1000
 )
 
-func toolTree(path string, depth int, root string) (string, bool) {
+func toolTree(ctx context.Context, path string, depth int, root string) (string, bool) {
 	abs, err := safePath(path, root)
 	if err != nil {
 		return err.Error(), true
@@ -399,7 +394,7 @@ func toolTree(path string, depth int, root string) (string, bool) {
 
 	var walk func(dir string, prefix string, currentDepth int)
 	walk = func(dir string, prefix string, currentDepth int) {
-		if limitReached || currentDepth > depth {
+		if limitReached || currentDepth > depth || ctx.Err() != nil {
 			return
 		}
 
@@ -419,7 +414,7 @@ func toolTree(path string, depth int, root string) (string, bool) {
 		dirCount := len(visible)
 		shown := 0
 		for i, e := range visible {
-			if limitReached {
+			if limitReached || ctx.Err() != nil {
 				return
 			}
 			if shown >= treeMaxEntriesPerDir {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"strings"
 	"time"
 )
 
@@ -24,6 +25,22 @@ func (e *rateLimitError) Error() string {
 func isRateLimitError(err error) bool {
 	var rle *rateLimitError
 	return errors.As(err, &rle)
+}
+
+// IsRateLimitError reports whether err indicates a rate limit (HTTP 429).
+// This checks for the structured rateLimitError type used by all providers,
+// with a string-match fallback for errors from external SDKs.
+func IsRateLimitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if isRateLimitError(err) {
+		return true
+	}
+	// Fallback: some SDK errors (e.g. Anthropic streaming) may wrap
+	// rate limit info in error strings rather than typed errors.
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "429") || strings.Contains(s, "rate limit") || strings.Contains(s, "rate_limit")
 }
 
 // WithRetry calls fn up to len(retryDelays)+1 times, retrying when shouldRetry

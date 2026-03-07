@@ -36,7 +36,7 @@ func newShowCmd() *cobra.Command {
 				return fmt.Errorf("discovery: %w", err)
 			}
 
-			configHash := cache.HashConfig(cfg.Model, cfg.Agent.MaxIterations, cfg.Agent.MaxTokens)
+			configHash := cache.HashConfig(cfg.Model, cfg.Agent.MaxIterations, cfg.Agent.MaxTokens, cfg.Provider, cfg.BaseURL)
 			c, err := cache.Load(cfg.Cache.Dir, configHash)
 			if err != nil {
 				return fmt.Errorf("loading cache: %w", err)

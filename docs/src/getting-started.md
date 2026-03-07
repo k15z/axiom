@@ -4,7 +4,7 @@ This guide takes you from zero to running your first axiom test in under 5 minut
 
 ## Prerequisites
 
-- Go 1.21 or later
+- Go 1.25 or later
 - An API key from a supported provider:
   - [Anthropic](https://console.anthropic.com/) (default)
   - [OpenAI](https://platform.openai.com/api-keys)
@@ -74,6 +74,42 @@ You'll see output like:
   2 passed · 1 failed · 1 cached
 ```
 
+## Add Your Own Test
+
+This is where axiom really shines. Describe what you want to test in plain English, and axiom generates the test for you:
+
+```bash
+axiom add "all API routes require authentication"
+```
+
+Axiom explores your codebase, understands the relevant code, generates a test with proper `on` globs and a specific condition, and asks for confirmation before writing it. You can also run the test immediately:
+
+```bash
+axiom add "database connections are always closed" --run
+```
+
+This is the fastest way to go from an idea to a verified property of your codebase.
+
+## Validate Your Tests
+
+Before running tests (especially after `init` or `add`), validate them:
+
+```bash
+axiom validate
+```
+
+This catches common issues before you spend API calls: invalid glob syntax, missing `on` patterns (tests that can never be cached), and vague conditions. Make this a habit.
+
+## Preview Before Running
+
+See what would run and the estimated token cost without calling the API:
+
+```bash
+axiom run --dry-run
+```
+
+This is especially useful before your first real run or in CI to estimate costs.
+
 ## Run a Single Test
 
 ```bash
@@ -86,9 +122,9 @@ axiom run test_auth_middleware
 axiom run --all
 ```
 
-## Write Your First Test
+## Write Tests Manually
 
-Create `.axiom/my_tests.yml`:
+You can also write tests by hand. Create `.axiom/my_tests.yml`:
 
 ```yaml
 test_readme_exists:
@@ -103,15 +139,7 @@ Run it:
 axiom run test_readme_exists
 ```
 
-## Add a Test Interactively
-
-Let the LLM generate a test from a description:
-
-```bash
-axiom add "all API routes require authentication"
-```
-
-Axiom explores your codebase, generates a test, and asks for confirmation before writing it.
+See [Writing Tests](./writing-tests.md) for the full YAML format and tips on writing effective conditions.
 
 ## Watch Mode
 

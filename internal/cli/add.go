@@ -42,17 +42,17 @@ Examples:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			intent := args[0]
 
-			// Verify .axiom/ exists
-			testDir := ".axiom"
-			if _, err := os.Stat(testDir); os.IsNotExist(err) {
-				return &SetupError{Err: fmt.Errorf("test directory %s not found — run %s first", testDir, color.CyanString("axiom init"))}
-			}
-
-			// Load config for model default
+			// Load config for model default and test_dir
 			cfg, err := config.Load("")
 			if err != nil {
 				return &SetupError{Err: err}
 			}
+
+			testDir := strings.TrimRight(cfg.TestDir, "/")
+			if _, err := os.Stat(testDir); os.IsNotExist(err) {
+				return &SetupError{Err: fmt.Errorf("test directory %s not found — run %s first", testDir, color.CyanString("axiom init"))}
+			}
+
 			if model == "" {
 				model = cfg.Model
 			}

@@ -56,52 +56,18 @@ func Load(testDir string) (Config, error) {
 	return cfg, cfg.ResolveKey()
 }
 
-// LoadForDryRun loads config without requiring an API key.
-// Used by --dry-run mode which performs discovery and cache checks only.
-func LoadForDryRun(testDir string) (Config, error) {
-	return LoadWithoutKey(testDir)
-}
-
 // LoadWithoutKey loads config from axiom.yml and .env but does not resolve the
 // provider or load the API key. Call ResolveKey() after applying CLI flag
 // overrides (e.g. --provider, --model).
 func LoadWithoutKey(testDir string) (Config, error) {
-	// Load .env before anything else so vars are available via os.Getenv
 	loadDotEnv()
-
-	cfg := Default()
-
-	// Load axiom.yml from the project root if it exists
-	if data, err := os.ReadFile("axiom.yml"); err == nil {
-		if err := yaml.Unmarshal(data, &cfg); err != nil {
-			return cfg, fmt.Errorf("parsing axiom.yml: %w", err)
-		}
-		// Re-apply defaults for zero values that weren't explicitly set
-		d := Default()
-		if cfg.Model == "" {
-			cfg.Model = d.Model
-		}
-		if cfg.TestDir == "" {
-			cfg.TestDir = d.TestDir
-		}
-		if cfg.Cache.Dir == "" {
-			cfg.Cache.Dir = d.Cache.Dir
-		}
-		if cfg.Agent.MaxIterations == 0 {
-			cfg.Agent.MaxIterations = d.Agent.MaxIterations
-		}
-		if cfg.Agent.MaxTokens == 0 {
-			cfg.Agent.MaxTokens = d.Agent.MaxTokens
-		}
-		if cfg.Agent.ToolTimeout == 0 {
-			cfg.Agent.ToolTimeout = d.Agent.ToolTimeout
-		}
+	cfg, err := loadYAML()
+	if err != nil {
+		return cfg, err
 	}
-
 	if testDir != "" {
 		cfg.TestDir = testDir
 	}
-
 	return cfg, nil
 }
 
@@ -125,49 +91,51 @@ func (cfg *Config) ResolveKey() error {
 
 // LoadMinimal loads config from .env and axiom.yml without requiring
 // ANTHROPIC_API_KEY. Use this for commands that don't call the API (e.g.
-// validate, list).
+// validate, list, cache).
 func LoadMinimal(testDir string) Config {
 	loadDotEnv()
-
-	cfg := Default()
-
-	if data, err := os.ReadFile("axiom.yml"); err == nil {
-		if err := yaml.Unmarshal(data, &cfg); err == nil {
-			d := Default()
-			if cfg.Model == "" {
-				cfg.Model = d.Model
-			}
-			if cfg.TestDir == "" {
-				cfg.TestDir = d.TestDir
-			}
-			if cfg.Cache.Dir == "" {
-				cfg.Cache.Dir = d.Cache.Dir
-			}
-			if cfg.Agent.MaxIterations == 0 {
-				cfg.Agent.MaxIterations = d.Agent.MaxIterations
-			}
-			if cfg.Agent.MaxTokens == 0 {
-				cfg.Agent.MaxTokens = d.Agent.MaxTokens
-			}
-		}
-	}
-
+	cfg, _ := loadYAML()
 	if testDir != "" {
 		cfg.TestDir = testDir
 	}
-
 	return cfg
 }
 
-// LoadAPIKey loads the API key from the environment or .env file.
-// Unlike Load(), it does not require axiom.yml to exist.
-func LoadAPIKey() (string, error) {
-	loadDotEnv()
-	key := os.Getenv("ANTHROPIC_API_KEY")
-	if key == "" {
-		return "", fmt.Errorf("ANTHROPIC_API_KEY is not set (set it in the environment or a .env file)")
+// loadYAML reads axiom.yml and applies defaults for zero values.
+func loadYAML() (Config, error) {
+	cfg := Default()
+
+	data, err := os.ReadFile("axiom.yml")
+	if err != nil {
+		return cfg, nil // no config file is fine
 	}
-	return key, nil
+
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return cfg, fmt.Errorf("parsing axiom.yml: %w", err)
+	}
+
+	// Re-apply defaults for zero values that weren't explicitly set
+	d := Default()
+	if cfg.Model == "" {
+		cfg.Model = d.Model
+	}
+	if cfg.TestDir == "" {
+		cfg.TestDir = d.TestDir
+	}
+	if cfg.Cache.Dir == "" {
+		cfg.Cache.Dir = d.Cache.Dir
+	}
+	if cfg.Agent.MaxIterations == 0 {
+		cfg.Agent.MaxIterations = d.Agent.MaxIterations
+	}
+	if cfg.Agent.MaxTokens == 0 {
+		cfg.Agent.MaxTokens = d.Agent.MaxTokens
+	}
+	if cfg.Agent.ToolTimeout == 0 {
+		cfg.Agent.ToolTimeout = d.Agent.ToolTimeout
+	}
+
+	return cfg, nil
 }
 
 // LoadAPIKeyForProvider returns the API key for the given provider.

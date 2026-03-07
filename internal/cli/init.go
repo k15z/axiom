@@ -30,14 +30,13 @@ Requires an API key to be set (in environment or .env file).
 The LLM explores your code and generates tests that verify architectural
 intent, security invariants, and design constraints.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dir := ".axiom"
+			// Load config to respect test_dir from axiom.yml
+			cfg := config.LoadMinimal("")
+			dir := strings.TrimRight(cfg.TestDir, "/")
 
 			if _, err := os.Stat(dir); err == nil {
 				return &SetupError{Err: fmt.Errorf("%s already exists — remove it first to re-initialize", dir)}
 			}
-
-			// Start with defaults, then apply CLI overrides
-			cfg := config.Default()
 			if model != "" {
 				cfg.Model = model
 			}
@@ -94,7 +93,7 @@ intent, security invariants, and design constraints.`,
 
 			// Print summary
 			fmt.Println()
-			printGeneratedTests(yamlContent)
+			printGeneratedTests(yamlContent, dir)
 			fmt.Println()
 			fmt.Println("Created axiom.yml with default configuration.")
 			fmt.Printf("Run %s to verify your codebase against these tests.\n", color.CyanString("axiom run"))
@@ -110,21 +109,22 @@ intent, security invariants, and design constraints.`,
 }
 
 // printGeneratedTests parses the YAML loosely to show test names.
-func printGeneratedTests(yaml string) {
+func printGeneratedTests(yamlStr string, dir string) {
 	var names []string
-	for _, line := range strings.Split(yaml, "\n") {
+	for _, line := range strings.Split(yamlStr, "\n") {
 		if strings.HasPrefix(line, "test_") && strings.HasSuffix(strings.TrimSpace(line), ":") {
 			name := strings.TrimSuffix(strings.TrimSpace(line), ":")
 			names = append(names, name)
 		}
 	}
 
+	testsFile := filepath.Join(dir, "tests.yml")
 	if len(names) == 0 {
-		fmt.Printf("Generated tests in %s\n", color.CyanString(".axiom/tests.yml"))
+		fmt.Printf("Generated tests in %s\n", color.CyanString(testsFile))
 		return
 	}
 
-	fmt.Printf("Generated %d tests in %s:\n", len(names), color.CyanString(".axiom/tests.yml"))
+	fmt.Printf("Generated %d tests in %s:\n", len(names), color.CyanString(testsFile))
 	for _, name := range names {
 		fmt.Printf("  %s %s\n", color.GreenString("•"), name)
 	}
