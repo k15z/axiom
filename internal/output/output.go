@@ -120,6 +120,30 @@ func Print(results []types.TestResult, model string, verbose bool) {
 		)
 	}
 	fmt.Println()
+
+	// CI-friendly summary on stderr (single greppable line)
+	fmt.Fprintf(os.Stderr, "axiom: %s\n", CISummary(passed, failed, cached, skipped))
+}
+
+// CISummary returns a single-line summary string suitable for CI logs.
+func CISummary(passed, failed, cached, skipped int) string {
+	var parts []string
+	if passed > 0 {
+		parts = append(parts, fmt.Sprintf("%d passed", passed))
+	}
+	if failed > 0 {
+		parts = append(parts, fmt.Sprintf("%d failed", failed))
+	}
+	if cached > 0 {
+		parts = append(parts, fmt.Sprintf("%d cached", cached))
+	}
+	if skipped > 0 {
+		parts = append(parts, fmt.Sprintf("%d skipped", skipped))
+	}
+	if len(parts) == 0 {
+		return "no tests ran"
+	}
+	return strings.Join(parts, ", ")
 }
 
 func PrintJSON(results []types.TestResult, model string) error {

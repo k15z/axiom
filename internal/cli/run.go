@@ -46,7 +46,7 @@ func newRunCmd() *cobra.Command {
 				cfg, err = config.Load(dir)
 			}
 			if err != nil {
-				return err
+				return &SetupError{Err: err}
 			}
 
 			if model != "" {
@@ -55,7 +55,7 @@ func newRunCmd() *cobra.Command {
 
 			tests, err := discovery.Discover(cfg.TestDir)
 			if err != nil {
-				return fmt.Errorf("discovery: %w", err)
+				return &SetupError{Err: fmt.Errorf("discovery: %w", err)}
 			}
 
 			if len(tests) == 0 {

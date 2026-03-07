@@ -79,7 +79,15 @@ Flags (run):
 
 ### CI Usage
 
-Axiom exits with code `0` if all tests pass, `1` if any fail:
+Exit codes:
+
+| Code | Meaning |
+|------|---------|
+| `0` | All tests passed (or cached/skipped) |
+| `1` | One or more tests failed |
+| `2` | Configuration or setup error (missing API key, bad YAML, test dir not found) |
+
+This lets CI distinguish "tests failed" from "axiom is broken":
 
 ```yaml
 # GitHub Actions
@@ -88,6 +96,8 @@ Axiom exits with code `0` if all tests pass, `1` if any fail:
   env:
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
+
+In non-TTY environments (CI), axiom prints per-test progress lines to stderr as tests complete, plus a greppable summary line: `axiom: 8 passed, 1 failed, 1 cached`.
 
 ## Configuration
 

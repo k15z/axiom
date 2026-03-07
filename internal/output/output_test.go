@@ -158,3 +158,32 @@ func TestHasFailures_FailedButSkipped(t *testing.T) {
 		t.Error("skipped result should not count as a failure")
 	}
 }
+
+// --- CISummary ---
+
+func TestCISummary(t *testing.T) {
+	cases := []struct {
+		name    string
+		passed  int
+		failed  int
+		cached  int
+		skipped int
+		want    string
+	}{
+		{"all passed", 5, 0, 0, 0, "5 passed"},
+		{"mixed results", 3, 1, 2, 0, "3 passed, 1 failed, 2 cached"},
+		{"all cached", 0, 0, 10, 0, "10 cached"},
+		{"failures and skipped", 0, 2, 0, 3, "2 failed, 3 skipped"},
+		{"everything", 4, 1, 3, 2, "4 passed, 1 failed, 3 cached, 2 skipped"},
+		{"no tests", 0, 0, 0, 0, "no tests ran"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := CISummary(tc.passed, tc.failed, tc.cached, tc.skipped)
+			if got != tc.want {
+				t.Errorf("CISummary(%d, %d, %d, %d) = %q, want %q",
+					tc.passed, tc.failed, tc.cached, tc.skipped, got, tc.want)
+			}
+		})
+	}
+}
