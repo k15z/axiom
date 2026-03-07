@@ -35,4 +35,4 @@ jobs:
         continue-on-error: true
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: go run -buildvcs=false ./cmd/axiom/ run --all --provider anthropic --model claude-haiku-4-5-20251001
+        run: go run -buildvcs=false ./cmd/axiom/ run --all --provider anthropic --model claude-haiku-4-5-20251001 --retries 1 --concurrency 2
