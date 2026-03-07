@@ -32,9 +32,10 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 	var cacheMu sync.Mutex
 	if cfg.Cache.Enabled && !opts.All {
 		var err error
-		c, err = cache.Load(cfg.Cache.Dir)
+		configHash := cache.HashConfig(cfg.Model, cfg.Agent.MaxIterations, cfg.Agent.MaxTokens)
+		c, err = cache.Load(cfg.Cache.Dir, configHash)
 		if err != nil {
-			c = cache.New(cfg.Cache.Dir)
+			c = cache.New(cfg.Cache.Dir, configHash)
 		}
 	}
 
@@ -211,12 +212,12 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 
 // ClearCache deletes the test cache. Used by the cache clear command.
 func ClearCache(cacheDir string) error {
-	return cache.New(cacheDir).Clear()
+	return cache.New(cacheDir, "").Clear()
 }
 
 // GetStatuses returns the cached status for each test without running any agents.
-func GetStatuses(tests []discovery.Test, cacheDir string, repoRoot string) []types.TestStatus {
-	c, _ := cache.Load(cacheDir)
+func GetStatuses(tests []discovery.Test, cacheDir string, repoRoot string, configHash string) []types.TestStatus {
+	c, _ := cache.Load(cacheDir, configHash)
 	statuses := make([]types.TestStatus, len(tests))
 	for i, t := range tests {
 		s := types.TestStatus{Test: t, Status: "pending"}

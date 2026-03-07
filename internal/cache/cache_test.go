@@ -26,6 +26,7 @@ func TestShouldSkip(t *testing.T) {
 		"src/utils.go": "package main",
 	}
 	globs := []string{"src/*.go"}
+	configHash := HashConfig("claude-haiku-4-5-20251001", 30, 10000)
 
 	tests := []struct {
 		name     string
@@ -87,12 +88,23 @@ func TestShouldSkip(t *testing.T) {
 			},
 			wantSkip: false,
 		},
+		{
+			name: "cached pass config hash changed",
+			seed: func(c *Cache, root string) {
+				// Seed with a different config hash (simulates old run with different model)
+				old := New(c.dir, HashConfig("claude-opus-4-6", 30, 10000))
+				hashes := HashGlobs(globs, root)
+				old.Update("test1", "pass", hashes, "")
+				c.entries = old.entries
+			},
+			wantSkip: false,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			root := setupRepo(t, repoFiles)
-			c := New(t.TempDir())
+			c := New(t.TempDir(), configHash)
 
 			tt.seed(c, root)
 			if tt.mutate != nil {
@@ -107,5 +119,25 @@ func TestShouldSkip(t *testing.T) {
 				t.Error("ShouldSkip() returned nil current hashes")
 			}
 		})
+	}
+}
+
+func TestHashConfig(t *testing.T) {
+	h1 := HashConfig("claude-haiku-4-5-20251001", 30, 10000)
+	h2 := HashConfig("claude-haiku-4-5-20251001", 30, 10000)
+	h3 := HashConfig("claude-opus-4-6", 30, 10000)
+	h4 := HashConfig("claude-haiku-4-5-20251001", 20, 10000)
+
+	if h1 != h2 {
+		t.Error("same inputs should produce same hash")
+	}
+	if h1 == h3 {
+		t.Error("different model should produce different hash")
+	}
+	if h1 == h4 {
+		t.Error("different max_iterations should produce different hash")
+	}
+	if len(h1) != 64 {
+		t.Errorf("expected 64-char hex SHA-256, got %d chars", len(h1))
 	}
 }
