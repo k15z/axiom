@@ -149,6 +149,20 @@ This is useful for:
 - **Complex tests** that need more iterations to explore
 - **Slow tests** that need a longer timeout
 
+## Agent Memory
+
+Axiom's agent learns about your codebase across runs. On the first run, the agent explores thoroughly. On subsequent runs (if files haven't changed), the agent skips redundant exploration and goes straight to evaluation.
+
+This caching of observations (called "notes") is automatic and transparent:
+
+- **First run:** Agent explores broadly, builds notes about architecture, patterns, file locations
+- **Subsequent runs:** Agent reads cached notes, checks what files changed, re-evaluates affected tests
+- **When files change:** Notes for affected tests are automatically invalidated and rebuilt
+
+The result: faster tests over time, and lower token usage after the initial run.
+
+Notes are stored in `.axiom/.cache/notes.json` and can safely be gitignored (like the rest of the cache).
+
 ## Organizing Tests
 
 Structure `.axiom/` by category:
