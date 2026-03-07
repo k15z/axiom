@@ -27,6 +27,7 @@ type slotState struct {
 	passed   bool
 	cached   bool
 	skipped  bool
+	errored  bool
 	duration time.Duration
 }
 
@@ -82,28 +83,30 @@ func isTextDelta(status string) bool {
 	return len(status) >= 4 && status[:4] == "✎ "
 }
 
-func (d *LiveDisplay) FinishTest(name string, passed, cached, skipped bool, dur time.Duration) {
+func (d *LiveDisplay) FinishTest(name string, passed, cached, skipped, errored bool, dur time.Duration) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if idx, ok := d.byName[name]; ok {
 		s := d.slots[idx]
-		s.done, s.passed, s.cached, s.skipped, s.duration = true, passed, cached, skipped, dur
+		s.done, s.passed, s.cached, s.skipped, s.errored, s.duration = true, passed, cached, skipped, errored, dur
 		d.completed++
 	}
 	if !tty {
-		d.printCIProgress(name, passed, cached, skipped, dur)
+		d.printCIProgress(name, passed, cached, skipped, errored, dur)
 	}
 	d.render()
 }
 
 // printCIProgress prints a one-line progress summary for non-TTY environments.
-func (d *LiveDisplay) printCIProgress(name string, passed, cached, skipped bool, dur time.Duration) {
+func (d *LiveDisplay) printCIProgress(name string, passed, cached, skipped, errored bool, dur time.Duration) {
 	var marker string
 	switch {
 	case cached:
 		marker = "○"
 	case skipped:
 		marker = "○"
+	case errored:
+		marker = "!"
 	case passed:
 		marker = "✓"
 	default:
@@ -116,6 +119,8 @@ func (d *LiveDisplay) printCIProgress(name string, passed, cached, skipped bool,
 		detail = "(cached)"
 	case skipped:
 		detail = "(skipped)"
+	case errored:
+		detail = fmt.Sprintf("(error, %.1fs)", dur.Seconds())
 	default:
 		detail = fmt.Sprintf("(%.1fs)", dur.Seconds())
 	}
@@ -195,6 +200,9 @@ func (d *LiveDisplay) slotLine(s *slotState) string {
 		return color.New(color.FgHiBlack).Sprintf("  ○ %s(cached)", nameCol)
 	case s.skipped:
 		return color.New(color.FgHiBlack).Sprintf("  ○ %s(skipped)", nameCol)
+	case s.errored:
+		return color.New(color.FgRed).Sprintf("  ! %s", nameCol) +
+			color.New(color.FgHiBlack).Sprintf("(error, %.1fs)", s.duration.Seconds())
 	case s.passed:
 		return color.New(color.FgGreen).Sprintf("  ✓ %s", nameCol) +
 			color.New(color.FgHiBlack).Sprintf("(%.1fs)", s.duration.Seconds())

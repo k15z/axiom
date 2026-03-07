@@ -47,14 +47,12 @@ func MatchesTag(t discovery.Test, tagFilter string) bool {
 // newProvider creates the appropriate LLM provider for the given config.
 // The progress callback is used for streaming text deltas (Anthropic only).
 func newProvider(cfg config.Config, progress provider.ProgressFunc) provider.Provider {
-	switch cfg.Provider {
-	case "openai":
-		return provider.NewOpenAI(cfg.APIKey, cfg.BaseURL)
-	case "gemini":
-		return provider.NewGemini(cfg.APIKey)
-	default:
-		return provider.NewAnthropic(cfg.APIKey, progress)
-	}
+	return provider.FromConfig(provider.ProviderConfig{
+		Provider: cfg.Provider,
+		APIKey:   cfg.APIKey,
+		BaseURL:  cfg.BaseURL,
+		Progress: progress,
+	})
 }
 
 func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Options) ([]types.TestResult, error) {
@@ -128,7 +126,7 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 				included[i] = true
 				cacheMu.Unlock()
 				live.StartTest(test.Name)
-				live.FinishTest(test.Name, passed, true, false, 0)
+				live.FinishTest(test.Name, passed, true, false, false, 0)
 				continue
 			}
 		}
@@ -149,7 +147,7 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 			case <-ctx.Done():
 				results[idx] = types.TestResult{Test: t, Skipped: true}
 				live.StartTest(t.Name)
-				live.FinishTest(t.Name, false, false, true, 0)
+				live.FinishTest(t.Name, false, false, true, false, 0)
 				return
 			default:
 			}
@@ -235,7 +233,7 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 				APICalls:     result.Usage.APICalls,
 			}
 			if err != nil {
-				tr.Passed = false
+				tr.Errored = true
 				tr.Reasoning = "Agent error: " + err.Error()
 			} else {
 				tr.Passed = result.Passed
@@ -250,7 +248,8 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 			}
 
 			// Retry failed tests. If a retry passes, mark as flaky.
-			if !tr.Passed && opts.Retries > 0 {
+			// Skip retries for infrastructure errors (API failures, timeouts).
+			if !tr.Passed && !tr.Errored && opts.Retries > 0 {
 				for retry := 1; retry <= opts.Retries; retry++ {
 					select {
 					case <-ctx.Done():
@@ -285,10 +284,10 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 
 			results[idx] = tr
 
-			live.FinishTest(t.Name, tr.Passed, false, false, tr.Duration)
+			live.FinishTest(t.Name, tr.Passed, false, false, tr.Errored, tr.Duration)
 
 			cacheMu.Lock()
-			if c != nil {
+			if c != nil && !tr.Errored {
 				res := "fail"
 				if tr.Passed {
 					res = "pass"

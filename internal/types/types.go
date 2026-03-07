@@ -17,6 +17,7 @@ type TestResult struct {
 	Passed    bool
 	Cached    bool
 	Skipped   bool // true when skipped due to --bail
+	Errored   bool // true when test failed due to infrastructure error (API failure, timeout)
 	Flaky     bool // true when test passed only after retry
 	Retries   int  // number of retries attempted
 	Reasoning string

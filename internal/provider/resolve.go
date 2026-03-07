@@ -19,6 +19,27 @@ func ResolveProvider(explicit, model string) (string, error) {
 	return InferProvider(model)
 }
 
+// ProviderConfig holds the fields needed to construct a Provider.
+// This avoids a circular dependency on the config package.
+type ProviderConfig struct {
+	Provider string       // "anthropic", "openai", or "gemini"
+	APIKey   string
+	BaseURL  string       // custom endpoint for OpenAI-compatible APIs
+	Progress ProgressFunc // streaming text callback (Anthropic only)
+}
+
+// FromConfig creates the appropriate Provider from resolved configuration.
+func FromConfig(cfg ProviderConfig) Provider {
+	switch cfg.Provider {
+	case "openai":
+		return NewOpenAI(cfg.APIKey, cfg.BaseURL)
+	case "gemini":
+		return NewGemini(cfg.APIKey)
+	default:
+		return NewAnthropic(cfg.APIKey, cfg.Progress)
+	}
+}
+
 // InferProvider guesses the provider from the model name.
 func InferProvider(model string) (string, error) {
 	lower := strings.ToLower(model)

@@ -23,7 +23,7 @@ func newValidateCmd() *cobra.Command {
 
 			tests, err := discovery.Discover(cfg.TestDir)
 			if err != nil {
-				return fmt.Errorf("discovery: %w", err)
+				return &SetupError{Err: fmt.Errorf("discovery: %w", err)}
 			}
 			if len(tests) == 0 {
 				fmt.Println("No tests found.")

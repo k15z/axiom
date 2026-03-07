@@ -41,6 +41,13 @@ func Print(results []types.TestResult, model string, verbose bool) {
 				gray.Printf("    ○ %s (cached)\n", r.Test.Name)
 			case r.Skipped:
 				gray.Printf("    ○ %s (skipped)\n", r.Test.Name)
+			case r.Errored:
+				red.Printf("    ! ")
+				fmt.Printf("%s", r.Test.Name)
+				gray.Printf(" (error, %.1fs)\n", r.Duration.Seconds())
+				if r.Reasoning != "" {
+					printReasoning(r.Reasoning, "      ")
+				}
 			case r.Flaky:
 				yellow.Printf("    ⚠ ")
 				fmt.Printf("%s", r.Test.Name)
@@ -76,7 +83,7 @@ func Print(results []types.TestResult, model string, verbose bool) {
 	}
 
 	// Summary
-	passed, failed, cached, skipped, flaky := 0, 0, 0, 0, 0
+	passed, failed, cached, skipped, flaky, errored := 0, 0, 0, 0, 0, 0
 	var totalUsage types.Usage
 	for _, r := range results {
 		switch {
@@ -84,6 +91,8 @@ func Print(results []types.TestResult, model string, verbose bool) {
 			cached++
 		case r.Skipped:
 			skipped++
+		case r.Errored:
+			errored++
 		case r.Flaky:
 			flaky++
 		case r.Passed:
@@ -116,6 +125,13 @@ func Print(results []types.TestResult, model string, verbose bool) {
 		red.Printf("%d failed", failed)
 		parts++
 	}
+	if errored > 0 {
+		if parts > 0 {
+			fmt.Print(" · ")
+		}
+		red.Printf("%d errored", errored)
+		parts++
+	}
 	if cached > 0 {
 		if parts > 0 {
 			fmt.Print(" · ")
@@ -143,17 +159,20 @@ func Print(results []types.TestResult, model string, verbose bool) {
 	fmt.Println()
 
 	// CI-friendly summary on stderr (single greppable line)
-	fmt.Fprintf(os.Stderr, "axiom: %s\n", CISummary(passed, failed, cached, skipped))
+	fmt.Fprintf(os.Stderr, "axiom: %s\n", CISummary(passed, failed, errored, cached, skipped))
 }
 
 // CISummary returns a single-line summary string suitable for CI logs.
-func CISummary(passed, failed, cached, skipped int) string {
+func CISummary(passed, failed, errored, cached, skipped int) string {
 	var parts []string
 	if passed > 0 {
 		parts = append(parts, fmt.Sprintf("%d passed", passed))
 	}
 	if failed > 0 {
 		parts = append(parts, fmt.Sprintf("%d failed", failed))
+	}
+	if errored > 0 {
+		parts = append(parts, fmt.Sprintf("%d errored", errored))
 	}
 	if cached > 0 {
 		parts = append(parts, fmt.Sprintf("%d cached", cached))
@@ -179,6 +198,7 @@ func PrintJSON(results []types.TestResult, model string) error {
 		File      string    `json:"file"`
 		Passed    bool      `json:"passed"`
 		Cached    bool      `json:"cached"`
+		Errored   bool      `json:"errored,omitempty"`
 		Flaky     bool      `json:"flaky,omitempty"`
 		Retries   int       `json:"retries,omitempty"`
 		Reasoning string    `json:"reasoning,omitempty"`
@@ -193,6 +213,7 @@ func PrintJSON(results []types.TestResult, model string) error {
 			File:      r.Test.SourceFile,
 			Passed:    r.Passed,
 			Cached:    r.Cached,
+			Errored:   r.Errored,
 			Flaky:     r.Flaky,
 			Retries:   r.Retries,
 			Reasoning: r.Reasoning,
@@ -246,16 +267,16 @@ func estimateCost(model string, inputTokens, outputTokens int) float64 {
 		"claude-sonnet-4-6":          {3.00, 15.00},
 		"claude-opus-4-6":            {15.00, 75.00},
 		// OpenAI
-		"gpt-4o":      {2.50, 10.00},
-		"gpt-4o-mini": {0.15, 0.60},
-		"gpt-4.1":     {2.00, 8.00},
-		"gpt-4.1-mini": {0.40, 1.60},
-		"gpt-4.1-nano": {0.10, 0.40},
-		"o3-mini":     {1.10, 4.40},
+		"gpt-4o":        {2.50, 10.00},
+		"gpt-4o-mini":   {0.15, 0.60},
+		"gpt-4.1":       {2.00, 8.00},
+		"gpt-4.1-mini":  {0.40, 1.60},
+		"gpt-4.1-nano":  {0.10, 0.40},
+		"o3-mini":       {1.10, 4.40},
 		// Gemini
-		"gemini-2.0-flash":  {0.10, 0.40},
-		"gemini-1.5-pro":    {1.25, 5.00},
-		"gemini-1.5-flash":  {0.075, 0.30},
+		"gemini-2.0-flash": {0.10, 0.40},
+		"gemini-1.5-pro":   {1.25, 5.00},
+		"gemini-1.5-flash": {0.075, 0.30},
 	}
 
 	p, ok := prices[model]
@@ -354,10 +375,11 @@ func FormatGitHub(results []types.TestResult, model string) string {
 	b.WriteString("| Test | File | Result | Duration |\n")
 	b.WriteString("|------|------|--------|----------|\n")
 
-	passed, failed, cached, skipped, flaky := 0, 0, 0, 0, 0
+	passed, failed, cached, skipped, flaky, errored := 0, 0, 0, 0, 0, 0
 	var totalUsage types.Usage
 	var failures []types.TestResult
 	var flakyTests []types.TestResult
+	var errors []types.TestResult
 
 	for _, r := range results {
 		icon := ":white_check_mark: Pass"
@@ -372,6 +394,10 @@ func FormatGitHub(results []types.TestResult, model string) string {
 			icon = ":fast_forward: Skipped"
 			dur = "-"
 			skipped++
+		case r.Errored:
+			icon = ":boom: Error"
+			errored++
+			errors = append(errors, r)
 		case r.Flaky:
 			icon = ":warning: Flaky"
 			flaky++
@@ -404,6 +430,9 @@ func FormatGitHub(results []types.TestResult, model string) string {
 	if failed > 0 {
 		parts = append(parts, fmt.Sprintf("**%d failed**", failed))
 	}
+	if errored > 0 {
+		parts = append(parts, fmt.Sprintf("**%d errored**", errored))
+	}
 	if cached > 0 {
 		parts = append(parts, fmt.Sprintf("**%d cached**", cached))
 	}
@@ -419,6 +448,19 @@ func FormatGitHub(results []types.TestResult, model string) string {
 	if len(failures) > 0 {
 		b.WriteString("\n<details>\n<summary>Failures</summary>\n\n")
 		for _, r := range failures {
+			b.WriteString(fmt.Sprintf("### %s\n", r.Test.Name))
+			if r.Reasoning != "" {
+				b.WriteString(fmt.Sprintf("> %s\n", strings.ReplaceAll(strings.TrimSpace(r.Reasoning), "\n", "\n> ")))
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("</details>\n")
+	}
+
+	// Errors details
+	if len(errors) > 0 {
+		b.WriteString("\n<details>\n<summary>Errors</summary>\n\n")
+		for _, r := range errors {
 			b.WriteString(fmt.Sprintf("### %s\n", r.Test.Name))
 			if r.Reasoning != "" {
 				b.WriteString(fmt.Sprintf("> %s\n", strings.ReplaceAll(strings.TrimSpace(r.Reasoning), "\n", "\n> ")))
@@ -456,9 +498,21 @@ func FormatGitHub(results []types.TestResult, model string) string {
 	return b.String()
 }
 
+// HasFailures returns true if any test result is a genuine test failure
+// (not cached, skipped, or an infrastructure error).
 func HasFailures(results []types.TestResult) bool {
 	for _, r := range results {
-		if !r.Passed && !r.Cached && !r.Skipped {
+		if !r.Passed && !r.Cached && !r.Skipped && !r.Errored {
+			return true
+		}
+	}
+	return false
+}
+
+// HasErrors returns true if any test result is an infrastructure error.
+func HasErrors(results []types.TestResult) bool {
+	for _, r := range results {
+		if r.Errored {
 			return true
 		}
 	}

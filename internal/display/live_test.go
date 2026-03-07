@@ -15,6 +15,7 @@ func TestPrintCIProgress(t *testing.T) {
 		passed    bool
 		cached    bool
 		skipped   bool
+		errored   bool
 		dur       time.Duration
 		completed int
 		total     int
@@ -54,6 +55,15 @@ func TestPrintCIProgress(t *testing.T) {
 			total:     5,
 			wantParts: []string{"[2/5]", "○", "test_skipped", "(skipped)"},
 		},
+		{
+			name:      "errored test",
+			testName:  "test_errored",
+			errored:   true,
+			dur:       3 * time.Second,
+			completed: 4,
+			total:     10,
+			wantParts: []string{"[4/10]", "!", "test_errored", "(error, 3.0s)"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -68,7 +78,7 @@ func TestPrintCIProgress(t *testing.T) {
 			oldStderr := os.Stderr
 			os.Stderr = w
 
-			d.printCIProgress(tt.testName, tt.passed, tt.cached, tt.skipped, tt.dur)
+			d.printCIProgress(tt.testName, tt.passed, tt.cached, tt.skipped, tt.errored, tt.dur)
 
 			w.Close()
 			os.Stderr = oldStderr
@@ -99,11 +109,11 @@ func TestLiveDisplayNonTTY(t *testing.T) {
 
 	d := NewLiveDisplay(3)
 	d.StartTest("test_a")
-	d.FinishTest("test_a", true, false, false, 1*time.Second)
+	d.FinishTest("test_a", true, false, false, false, 1*time.Second)
 	d.StartTest("test_b")
-	d.FinishTest("test_b", false, true, false, 0)
+	d.FinishTest("test_b", false, true, false, false, 0)
 	d.StartTest("test_c")
-	d.FinishTest("test_c", false, false, false, 2*time.Second)
+	d.FinishTest("test_c", false, false, false, false, 2*time.Second)
 	d.Close()
 
 	w.Close()
@@ -142,7 +152,7 @@ func TestNonTTYFiltersTextDeltas(t *testing.T) {
 	// Tool calls should still print
 	d.Update("test_a", "→ read_file src/main.go")
 	d.Update("test_a", "thinking (turn 2/30)")
-	d.FinishTest("test_a", true, false, false, 1*time.Second)
+	d.FinishTest("test_a", true, false, false, false, 1*time.Second)
 	d.Close()
 
 	w.Close()

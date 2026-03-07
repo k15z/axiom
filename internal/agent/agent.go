@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/k15z/axiom/internal/provider"
 )
+
+var verdictRe = regexp.MustCompile(`(?i)VERDICT:\s+(PASS|FAIL)`)
 
 type Usage struct {
 	InputTokens  int
@@ -229,18 +232,18 @@ func formatToolCall(name string, input json.RawMessage) string {
 }
 
 func parseVerdict(text string) Result {
-	upper := strings.ToUpper(text)
-
 	// Extract notes if present (before or after verdict)
 	agentNotes, noteFiles := parseNotes(text)
 
-	if idx := strings.Index(upper, "VERDICT: PASS"); idx != -1 {
-		reasoning := stripNotes(strings.TrimSpace(text[idx+len("VERDICT: PASS"):]))
-		return Result{Passed: true, Reasoning: reasoning, Notes: agentNotes, NoteFiles: noteFiles}
-	}
-	if idx := strings.Index(upper, "VERDICT: FAIL"); idx != -1 {
-		reasoning := stripNotes(strings.TrimSpace(text[idx+len("VERDICT: FAIL"):]))
-		return Result{Passed: false, Reasoning: reasoning, Notes: agentNotes, NoteFiles: noteFiles}
+	// Find all verdict matches; use the last one so a final FAIL overrides
+	// an earlier PASS mentioned in reasoning.
+	matches := verdictRe.FindAllStringIndex(text, -1)
+	if len(matches) > 0 {
+		last := matches[len(matches)-1]
+		matchText := text[last[0]:last[1]]
+		passed := strings.HasSuffix(strings.ToUpper(matchText), "PASS")
+		reasoning := stripNotes(strings.TrimSpace(text[last[1]:]))
+		return Result{Passed: passed, Reasoning: reasoning, Notes: agentNotes, NoteFiles: noteFiles}
 	}
 
 	return Result{

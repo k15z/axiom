@@ -116,9 +116,9 @@ func TestParseVerdict(t *testing.T) {
 			wantReasoning: "Missing required field",
 		},
 		{
-			name:       "pass takes priority over fail",
+			name:       "last verdict wins (fail overrides pass)",
 			text:       "VERDICT: PASS but also VERDICT: FAIL",
-			wantPassed: true,
+			wantPassed: false,
 		},
 		{
 			name:      "no verdict",
@@ -157,9 +157,10 @@ func TestParseVerdict(t *testing.T) {
 			noVerdict: true,
 		},
 		{
-			name:      "verdict with extra whitespace does not match",
-			text:      "VERDICT:   PASS   extra spaces",
-			noVerdict: true,
+			name:          "verdict with extra whitespace matches",
+			text:          "VERDICT:   PASS   extra spaces",
+			wantPassed:    true,
+			wantReasoning: "extra spaces",
 		},
 		{
 			name:       "fail verdict at end of text",

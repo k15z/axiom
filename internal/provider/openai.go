@@ -252,8 +252,7 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, req oaiRequest) (*oaiRes
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
 
-	delays := []time.Duration{5 * time.Second, 15 * time.Second, 30 * time.Second, 60 * time.Second}
-	for attempt, maxAttempts := 0, len(delays)+1; attempt < maxAttempts; attempt++ {
+	return WithRetry(ctx, func() (*oaiResponse, error) {
 		resp, err := p.client.Do(httpReq.Clone(ctx))
 		if err != nil {
 			return nil, fmt.Errorf("HTTP request failed: %w", err)
@@ -265,13 +264,8 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, req oaiRequest) (*oaiRes
 			return nil, fmt.Errorf("reading response: %w", err)
 		}
 
-		if resp.StatusCode == 429 && attempt < maxAttempts-1 {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(delays[attempt]):
-				continue
-			}
+		if resp.StatusCode == 429 {
+			return nil, &rateLimitError{status: 429}
 		}
 
 		if resp.StatusCode != 200 {
@@ -288,8 +282,7 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, req oaiRequest) (*oaiRes
 		}
 
 		return &oaiResp, nil
-	}
-	return nil, fmt.Errorf("unreachable")
+	}, isRateLimitError)
 }
 
 // extractText gets the text string from an oaiMessage Content field,

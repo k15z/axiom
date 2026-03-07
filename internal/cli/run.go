@@ -153,6 +153,9 @@ func newRunCmd() *cobra.Command {
 			if output.HasFailures(results) {
 				os.Exit(1)
 			}
+			if output.HasErrors(results) {
+				os.Exit(2)
+			}
 			return nil
 		},
 	}

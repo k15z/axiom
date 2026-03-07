@@ -227,6 +227,43 @@ func TestHasFailures_MixedNonFailures(t *testing.T) {
 	}
 }
 
+func TestHasFailures_ErroredNotCounted(t *testing.T) {
+	results := []types.TestResult{
+		{Passed: false, Errored: true},
+	}
+	if HasFailures(results) {
+		t.Error("errored result should not count as a failure")
+	}
+}
+
+// --- HasErrors ---
+
+func TestHasErrors_Empty(t *testing.T) {
+	if HasErrors(nil) {
+		t.Error("empty slice should return false")
+	}
+}
+
+func TestHasErrors_OneErrored(t *testing.T) {
+	results := []types.TestResult{
+		{Passed: true},
+		{Errored: true},
+	}
+	if !HasErrors(results) {
+		t.Error("one errored result should return true")
+	}
+}
+
+func TestHasErrors_NoErrors(t *testing.T) {
+	results := []types.TestResult{
+		{Passed: true},
+		{Passed: false},
+	}
+	if HasErrors(results) {
+		t.Error("no errored results should return false")
+	}
+}
+
 // --- CISummary ---
 
 func TestCISummary(t *testing.T) {
@@ -234,27 +271,29 @@ func TestCISummary(t *testing.T) {
 		name    string
 		passed  int
 		failed  int
+		errored int
 		cached  int
 		skipped int
 		want    string
 	}{
-		{"all passed", 5, 0, 0, 0, "5 passed"},
-		{"mixed results", 3, 1, 2, 0, "3 passed, 1 failed, 2 cached"},
-		{"all cached", 0, 0, 10, 0, "10 cached"},
-		{"failures and skipped", 0, 2, 0, 3, "2 failed, 3 skipped"},
-		{"everything", 4, 1, 3, 2, "4 passed, 1 failed, 3 cached, 2 skipped"},
-		{"no tests", 0, 0, 0, 0, "no tests ran"},
-		{"only failed", 0, 1, 0, 0, "1 failed"},
-		{"only skipped", 0, 0, 0, 5, "5 skipped"},
-		{"passed and cached", 2, 0, 3, 0, "2 passed, 3 cached"},
-		{"single each", 1, 1, 1, 1, "1 passed, 1 failed, 1 cached, 1 skipped"},
+		{"all passed", 5, 0, 0, 0, 0, "5 passed"},
+		{"mixed results", 3, 1, 0, 2, 0, "3 passed, 1 failed, 2 cached"},
+		{"all cached", 0, 0, 0, 10, 0, "10 cached"},
+		{"failures and skipped", 0, 2, 0, 0, 3, "2 failed, 3 skipped"},
+		{"everything", 4, 1, 0, 3, 2, "4 passed, 1 failed, 3 cached, 2 skipped"},
+		{"no tests", 0, 0, 0, 0, 0, "no tests ran"},
+		{"only failed", 0, 1, 0, 0, 0, "1 failed"},
+		{"only skipped", 0, 0, 0, 0, 5, "5 skipped"},
+		{"passed and cached", 2, 0, 0, 3, 0, "2 passed, 3 cached"},
+		{"single each", 1, 1, 0, 1, 1, "1 passed, 1 failed, 1 cached, 1 skipped"},
+		{"with errors", 3, 1, 2, 0, 0, "3 passed, 1 failed, 2 errored"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := CISummary(tc.passed, tc.failed, tc.cached, tc.skipped)
+			got := CISummary(tc.passed, tc.failed, tc.errored, tc.cached, tc.skipped)
 			if got != tc.want {
-				t.Errorf("CISummary(%d, %d, %d, %d) = %q, want %q",
-					tc.passed, tc.failed, tc.cached, tc.skipped, got, tc.want)
+				t.Errorf("CISummary(%d, %d, %d, %d, %d) = %q, want %q",
+					tc.passed, tc.failed, tc.errored, tc.cached, tc.skipped, got, tc.want)
 			}
 		})
 	}
@@ -338,6 +377,27 @@ func TestFormatGitHub_FlakyIcon(t *testing.T) {
 	}
 	if !strings.Contains(got, "Passed on retry 2") {
 		t.Error("expected retry count in flaky section")
+	}
+}
+
+func TestFormatGitHub_ErroredIcon(t *testing.T) {
+	results := []types.TestResult{
+		{
+			Test:      discovery.Test{Name: "test_api_down", SourceFile: "a.yml"},
+			Errored:   true,
+			Reasoning: "Agent error: API call failed: 503 Service Unavailable",
+			Duration:  3 * time.Second,
+		},
+	}
+	got := FormatGitHub(results, "claude-haiku-4-5-20251001")
+	if !strings.Contains(got, ":boom: Error") {
+		t.Error("expected errored icon")
+	}
+	if !strings.Contains(got, "<summary>Errors</summary>") {
+		t.Error("expected Errors section")
+	}
+	if !strings.Contains(got, "### test_api_down") {
+		t.Error("expected error heading")
 	}
 }
 

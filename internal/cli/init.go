@@ -15,36 +15,47 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const sampleConfig = `# axiom configuration
-# See: https://github.com/k15z/axiom
-model: claude-haiku-4-5-20251001
-`
-
 func newInitCmd() *cobra.Command {
-	return &cobra.Command{
+	var (
+		model string
+		prov  string
+	)
+
+	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize axiom in the current project",
 		Long: `Analyze the codebase and generate behavioral tests.
 
-Requires ANTHROPIC_API_KEY to be set (in environment or .env file).
+Requires an API key to be set (in environment or .env file).
 The LLM explores your code and generates tests that verify architectural
 intent, security invariants, and design constraints.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := ".axiom"
 
 			if _, err := os.Stat(dir); err == nil {
-				return fmt.Errorf("%s already exists — remove it first to re-initialize", dir)
+				return &SetupError{Err: fmt.Errorf("%s already exists — remove it first to re-initialize", dir)}
 			}
 
-			// Load API key (init always uses Anthropic for now)
-			apiKey, err := config.LoadAPIKey()
-			if err != nil {
-				return err
+			// Start with defaults, then apply CLI overrides
+			cfg := config.Default()
+			if model != "" {
+				cfg.Model = model
+			}
+			if prov != "" {
+				cfg.Provider = prov
 			}
 
-			model := "claude-haiku-4-5-20251001"
+			// Resolve provider and load the correct API key
+			if err := cfg.ResolveKey(); err != nil {
+				return &SetupError{Err: err}
+			}
+
 			repoRoot, _ := filepath.Abs(".")
-			var p provider.Provider = provider.NewAnthropic(apiKey, nil)
+			p := provider.FromConfig(provider.ProviderConfig{
+				Provider: cfg.Provider,
+				APIKey:   cfg.APIKey,
+				BaseURL:  cfg.BaseURL,
+			})
 
 			// Progress display
 			tty := isatty.IsTerminal(os.Stderr.Fd())
@@ -53,7 +64,7 @@ intent, security invariants, and design constraints.`,
 
 			yamlContent, err := scaffold.GenerateTests(
 				context.Background(),
-				p, model, repoRoot,
+				p, cfg.Model, repoRoot,
 				func(msg string) {
 					spin.update(msg)
 				},
@@ -75,7 +86,9 @@ intent, security invariants, and design constraints.`,
 				return fmt.Errorf("writing %s: %w", testsPath, err)
 			}
 
-			if err := os.WriteFile("axiom.yml", []byte(sampleConfig), 0o644); err != nil {
+			// Write axiom.yml with the model used for init
+			sampleCfg := fmt.Sprintf("# axiom configuration\n# See: https://github.com/k15z/axiom\nmodel: %s\n", cfg.Model)
+			if err := os.WriteFile("axiom.yml", []byte(sampleCfg), 0o644); err != nil {
 				return fmt.Errorf("writing axiom.yml: %w", err)
 			}
 
@@ -89,6 +102,11 @@ intent, security invariants, and design constraints.`,
 			return nil
 		},
 	}
+
+	cmd.Flags().StringVarP(&model, "model", "m", "", "LLM model to use")
+	cmd.Flags().StringVarP(&prov, "provider", "p", "", "LLM provider: anthropic, openai, or gemini")
+
+	return cmd
 }
 
 // printGeneratedTests parses the YAML loosely to show test names.
@@ -111,4 +129,3 @@ func printGeneratedTests(yaml string) {
 		fmt.Printf("  %s %s\n", color.GreenString("•"), name)
 	}
 }
-

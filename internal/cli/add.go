@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/fatih/color"
@@ -39,13 +40,13 @@ Examples:
 			// Verify .axiom/ exists
 			testDir := ".axiom"
 			if _, err := os.Stat(testDir); os.IsNotExist(err) {
-				return fmt.Errorf("test directory %s not found — run %s first", testDir, color.CyanString("axiom init"))
+				return &SetupError{Err: fmt.Errorf("test directory %s not found — run %s first", testDir, color.CyanString("axiom init"))}
 			}
 
 			// Load config for model default
 			cfg, err := config.Load("")
 			if err != nil {
-				return err
+				return &SetupError{Err: err}
 			}
 			if model == "" {
 				model = cfg.Model
@@ -58,15 +59,11 @@ Examples:
 			spin := newSpinner(tty, "exploring codebase…")
 			spin.start()
 
-			var p provider.Provider
-			switch cfg.Provider {
-			case "openai":
-				p = provider.NewOpenAI(cfg.APIKey, cfg.BaseURL)
-			case "gemini":
-				p = provider.NewGemini(cfg.APIKey)
-			default:
-				p = provider.NewAnthropic(cfg.APIKey, nil)
-			}
+			p := provider.FromConfig(provider.ProviderConfig{
+				Provider: cfg.Provider,
+				APIKey:   cfg.APIKey,
+				BaseURL:  cfg.BaseURL,
+			})
 
 			yamlContent, err := scaffold.GenerateTest(
 				context.Background(),
@@ -89,8 +86,16 @@ Examples:
 			fmt.Println(yamlContent)
 			fmt.Println()
 
+			// Determine target file
+			targetFile := file
+			if tty && !cmd.Flags().Changed("file") {
+				if chosen, ok := promptFileChoice(testDir); ok {
+					targetFile = chosen
+				}
+			}
+
 			// Interactive confirmation
-			targetPath := filepath.Join(testDir, file)
+			targetPath := filepath.Join(testDir, targetFile)
 			if !tty {
 				// Non-interactive: just write it
 				return appendTest(targetPath, yamlContent)
@@ -118,6 +123,47 @@ Examples:
 	cmd.Flags().StringVarP(&file, "file", "f", "tests.yml", "Target YAML file inside .axiom/")
 
 	return cmd
+}
+
+// promptFileChoice lists YAML files in testDir and asks the user to pick one.
+// Returns the chosen filename and true, or ("", false) if there's only one file
+// or no files (caller should use the default).
+func promptFileChoice(testDir string) (string, bool) {
+	entries, err := os.ReadDir(testDir)
+	if err != nil {
+		return "", false
+	}
+	var files []string
+	for _, e := range entries {
+		if e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		if strings.HasSuffix(e.Name(), ".yml") || strings.HasSuffix(e.Name(), ".yaml") {
+			files = append(files, e.Name())
+		}
+	}
+	sort.Strings(files)
+	if len(files) <= 1 {
+		return "", false
+	}
+
+	fmt.Println("Multiple test files found:")
+	for i, f := range files {
+		fmt.Printf("  %d) %s\n", i+1, f)
+	}
+	fmt.Printf("Choose a file [1-%d]: ", len(files))
+
+	reader := bufio.NewReader(os.Stdin)
+	answer, _ := reader.ReadString('\n')
+	answer = strings.TrimSpace(answer)
+
+	var idx int
+	if _, err := fmt.Sscanf(answer, "%d", &idx); err != nil || idx < 1 || idx > len(files) {
+		// Invalid input — use first file
+		fmt.Printf("Using %s\n", files[0])
+		return files[0], true
+	}
+	return files[idx-1], true
 }
 
 // appendTest appends a test YAML block to a file, creating it if needed.

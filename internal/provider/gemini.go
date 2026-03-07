@@ -230,8 +230,7 @@ func (p *GeminiProvider) doRequest(ctx context.Context, model string, req gemini
 
 	url := fmt.Sprintf("%s/models/%s:generateContent", geminiBaseURL, model)
 
-	delays := []time.Duration{5 * time.Second, 15 * time.Second, 30 * time.Second, 60 * time.Second}
-	for attempt, maxAttempts := 0, len(delays)+1; attempt < maxAttempts; attempt++ {
+	return WithRetry(ctx, func() (*geminiResponse, error) {
 		httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 		if err != nil {
 			return nil, err
@@ -250,13 +249,8 @@ func (p *GeminiProvider) doRequest(ctx context.Context, model string, req gemini
 			return nil, fmt.Errorf("reading response: %w", err)
 		}
 
-		if resp.StatusCode == 429 && attempt < maxAttempts-1 {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(delays[attempt]):
-				continue
-			}
+		if resp.StatusCode == 429 {
+			return nil, &rateLimitError{status: 429}
 		}
 
 		if resp.StatusCode != 200 {
@@ -269,20 +263,14 @@ func (p *GeminiProvider) doRequest(ctx context.Context, model string, req gemini
 		}
 
 		if gemResp.Error != nil {
-			if gemResp.Error.Code == 429 && attempt < maxAttempts-1 {
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-time.After(delays[attempt]):
-					continue
-				}
+			if gemResp.Error.Code == 429 {
+				return nil, &rateLimitError{status: 429}
 			}
 			return nil, fmt.Errorf("Gemini error: %s", gemResp.Error.Message)
 		}
 
 		return &gemResp, nil
-	}
-	return nil, fmt.Errorf("unreachable")
+	}, isRateLimitError)
 }
 
 // stripGooglePrefix removes "google/" prefix from model names for the Gemini API URL.

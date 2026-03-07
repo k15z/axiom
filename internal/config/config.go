@@ -170,6 +170,13 @@ func LoadAPIKey() (string, error) {
 	return key, nil
 }
 
+// LoadAPIKeyForProvider returns the API key for the given provider.
+// It loads .env first, then checks the environment for the provider-specific key.
+func LoadAPIKeyForProvider(prov string) (string, error) {
+	loadDotEnv()
+	return loadAPIKeyForProvider(prov)
+}
+
 // loadAPIKeyForProvider returns the API key for the given provider.
 func loadAPIKeyForProvider(prov string) (string, error) {
 	var envVar string

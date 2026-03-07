@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
@@ -145,24 +144,11 @@ func (p *AnthropicProvider) consumeStream(stream *ssestream.Stream[anthropic.Mes
 
 // streamWithRetry opens a streaming API call with retry on 429 rate limit errors.
 func (p *AnthropicProvider) streamWithRetry(ctx context.Context, params anthropic.MessageNewParams) (*anthropic.Message, error) {
-	delays := []time.Duration{5 * time.Second, 15 * time.Second, 30 * time.Second, 60 * time.Second}
-	for attempt, maxAttempts := 0, len(delays)+1; attempt < maxAttempts; attempt++ {
+	return WithRetry(ctx, func() (*anthropic.Message, error) {
 		stream := p.client.Messages.NewStreaming(ctx, params)
-		msg, err := p.consumeStream(stream)
-		if err == nil {
-			return msg, nil
-		}
-		errStr := err.Error()
-		isRateLimit := strings.Contains(errStr, "429") || strings.Contains(errStr, "rate_limit_error")
-		if !isRateLimit || attempt == maxAttempts-1 {
-			return nil, err
-		}
-		delay := delays[attempt]
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(delay):
-		}
-	}
-	return nil, fmt.Errorf("unreachable")
+		return p.consumeStream(stream)
+	}, func(err error) bool {
+		s := err.Error()
+		return strings.Contains(s, "429") || strings.Contains(s, "rate_limit_error")
+	})
 }
