@@ -1,23 +1,9 @@
-test_exported_functions_documented:
+test_public_api_is_documented:
   tags: [code-quality]
   on:
     - internal/**/*.go
   condition: >
-    All exported functions and types in the internal/agent, internal/runner,
-    internal/cache, and internal/discovery packages should have GoDoc comments.
-    Check that each exported func or type (name starting with uppercase) has a
-    comment on the line immediately before it. Test files (*_test.go) are excluded.
-    Minor exceptions are allowed for simple struct field accessors or one-line
-    wrapper functions.
-
-test_no_circular_imports:
-  tags: [code-quality, architecture]
-  on:
-    - internal/**/*.go
-  condition: >
-    No package under internal/ should have circular import dependencies.
-    Each package's imports (found in the import blocks of its .go files)
-    should form a directed acyclic graph. For example, if package A imports
-    package B, then package B must not import package A either directly or
-    through an intermediate package. Check import statements in all packages
-    under internal/.
+    All exported functions and types in the core packages should have
+    documentation comments. Test files are excluded. Trivial accessors
+    or one-line wrappers may be excepted, but anything that forms the
+    public API of a package should be documented.

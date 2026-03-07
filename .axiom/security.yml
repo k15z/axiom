@@ -1,32 +1,27 @@
-test_path_traversal_prevention:
+test_agent_tools_prevent_path_traversal:
   tags: [security]
   on:
-    - internal/agent/tools.go
+    - internal/agent/**/*.go
   condition: >
-    All agent tools that accept file paths (read_file, list_dir, glob, grep) must
-    validate that resolved paths do not escape the repository root directory. There
-    should be a shared path validation function that converts relative paths to
-    absolute, then checks they are prefixed by the repo root. Paths like "../../../etc/passwd"
-    must be rejected.
+    Agent tools that accept file paths must prevent path traversal attacks.
+    Resolved paths should be confined to the repository root -- attempts to
+    access files outside the repo (e.g., "../../../etc/passwd") must be rejected.
 
 test_no_arbitrary_command_execution:
   tags: [security]
   on:
-    - internal/agent/*.go
+    - internal/agent/**/*.go
   condition: >
-    The agent must not have any tool that allows arbitrary shell command execution.
-    The only tool that runs a subprocess should be grep, and it must construct the
-    command itself from validated parameters -- it should never pass user/LLM-provided
-    strings directly as the command to exec. No tool should use sh -c or similar
-    shell invocation.
+    The agent must not be able to execute arbitrary shell commands. Any tool
+    that runs a subprocess should construct the command internally from
+    validated parameters, never by passing LLM-provided strings directly
+    to a shell. No tool should invoke a shell interpreter (e.g., sh -c).
 
-test_api_key_not_leaked:
+test_api_keys_not_leaked:
   tags: [security]
   on:
     - internal/**/*.go
   condition: >
-    The Anthropic API key must never be logged, printed to stdout/stderr, or
-    included in error messages. Search for any fmt.Print, log.Print, fmt.Errorf,
-    or fmt.Fprintf calls that reference the API key variable or field. The key
-    should only be passed to the Anthropic client constructor in agent.go and
-    to the scaffold package for test generation.
+    API keys and secrets must never appear in log output, error messages,
+    or stdout/stderr. They should only be used when constructing API clients,
+    never included in user-visible strings.
