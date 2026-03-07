@@ -85,6 +85,11 @@ Flags (run):
   -w, --watch              Watch for file changes and re-run affected tests
       --retries int        Re-run failed tests up to N times; mark as flaky if a retry passes
       --dry-run            Preview which tests would run and estimate token cost
+
+Flags (show):
+  -d, --dir string         Path to test directory
+      --json               Output as JSON
+      --diff               Show diff against previous reasoning
 ```
 
 ### CI Usage

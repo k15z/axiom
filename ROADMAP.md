@@ -25,6 +25,7 @@ Shipped features — kept here for reference.
 - **Documentation site** — mdBook-based docs with GitHub Pages deployment
 - **Enhanced examples** — 11 example tests across architecture, security, error handling, and code quality
 - **Agent memory / codebase notes** — agent persists investigation notes across runs with file-hash staleness tracking
+- **Agent reasoning diff** (`axiom show --diff`) — compare current cached reasoning against the previous run's reasoning with +/- line markers
 
 ## Reliability & Trust
 
@@ -37,7 +38,6 @@ Shipped features — kept here for reference.
 
 ## Agent Quality
 
-- **Agent reasoning diff** — `axiom show --diff` compares current cached reasoning against the previous run's reasoning, highlighting what changed
 - **Verbose tool tracing** (`axiom run --trace`) — log every tool call, its arguments, output size, and duration to a file for post-mortem debugging
 
 ## Future Ideas

@@ -17,8 +17,9 @@ type Entry struct {
 	FileHashes map[string]string `json:"file_hashes"`
 	Result     string            `json:"result"`                // "pass" or "fail"
 	PrevResult string            `json:"prev_result,omitempty"` // previous run's result for flaky detection
-	Reasoning  string            `json:"reasoning,omitempty"`
-	ConfigHash string            `json:"config_hash,omitempty"`
+	Reasoning     string            `json:"reasoning,omitempty"`
+	PrevReasoning string            `json:"prev_reasoning,omitempty"`
+	ConfigHash    string            `json:"config_hash,omitempty"`
 }
 
 type Cache struct {
@@ -90,16 +91,19 @@ func (c *Cache) ShouldSkip(testName string, onGlobs []string, repoRoot string) (
 
 func (c *Cache) Update(testName string, result string, fileHashes map[string]string, reasoning string) {
 	prevResult := ""
+	prevReasoning := ""
 	if old, ok := c.entries[testName]; ok {
 		prevResult = old.Result
+		prevReasoning = old.Reasoning
 	}
 	c.entries[testName] = Entry{
-		LastRun:    time.Now(),
-		FileHashes: fileHashes,
-		Result:     result,
-		PrevResult: prevResult,
-		Reasoning:  reasoning,
-		ConfigHash: c.configHash,
+		LastRun:       time.Now(),
+		FileHashes:    fileHashes,
+		Result:        result,
+		PrevResult:    prevResult,
+		Reasoning:     reasoning,
+		PrevReasoning: prevReasoning,
+		ConfigHash:    c.configHash,
 	}
 }
 
