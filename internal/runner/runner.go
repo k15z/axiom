@@ -46,7 +46,8 @@ func MatchesTag(t discovery.Test, tagFilter string) bool {
 
 // newProvider creates the appropriate LLM provider for the given config.
 // The progress callback is used for streaming text deltas (Anthropic only).
-func newProvider(cfg config.Config, progress provider.ProgressFunc) provider.Provider {
+// Declared as a variable so tests can override it with a mock.
+var newProvider = func(cfg config.Config, progress provider.ProgressFunc) provider.Provider {
 	return provider.FromConfig(provider.ProviderConfig{
 		Provider: cfg.Provider,
 		APIKey:   cfg.APIKey,
