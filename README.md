@@ -67,10 +67,12 @@ axiom <command> [flags]
 Commands:
   init                  Initialize axiom in the current project
   run [test-name]       Run behavioral tests (optionally a single test by name)
+  add <intent>          Generate a test from a natural-language description
   list                  List all tests and their cached status
   show <test-name>      Show cached result and reasoning for a test
   validate              Lint test YAML files for common issues
   cache clear           Clear the cache, forcing all tests to re-run
+  version               Print the axiom version
 
 Flags (run):
   -a, --all                Run all tests, ignoring cache
@@ -85,6 +87,8 @@ Flags (run):
   -w, --watch              Watch for file changes and re-run affected tests
       --retries int        Re-run failed tests up to N times; mark as flaky if a retry passes
       --dry-run            Preview which tests would run and estimate token cost
+      --strict             Treat flaky tests (passed on retry) as failures
+  -p, --provider string    LLM provider: anthropic, openai, or gemini
 
 Flags (show):
   -d, --dir string         Path to test directory

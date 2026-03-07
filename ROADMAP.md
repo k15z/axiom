@@ -26,18 +26,23 @@ Shipped features — kept here for reference.
 - **Enhanced examples** — 11 example tests across architecture, security, error handling, and code quality
 - **Agent memory / codebase notes** — agent persists investigation notes across runs with file-hash staleness tracking
 - **Agent reasoning diff** (`axiom show --diff`) — compare current cached reasoning against the previous run's reasoning with +/- line markers
+- **Infrastructure error distinction** — `Errored` tests (API failures, timeouts) show `!` icon, exit code 2, skip retries and cache updates
+- **Verdict parsing tightening** — regex-based with whitespace tolerance and last-match-wins semantics
+- **`axiom version`** — version command with ldflags support
+- **`--strict` mode** — `axiom run --strict` treats flaky tests (passed on retry) as failures
+- **`axiom add` UX improvements** — file selection prompt when multiple YAML files exist, `--run` flag to run the test immediately after adding, YAML validation before writing
+- **`axiom init` multi-provider** — respects configured provider instead of hardcoding Anthropic
+- **Shared retry logic with jitter** — extracted retry utility across all providers with exponential backoff and jitter to prevent thundering herd
+- **Runner-level rate-limit backoff** — automatic exponential backoff with jitter when 429 errors are detected, with cooldown auto-reset
+- **Expanded unit test coverage** — 67+ new tests across agent (14 mock-provider tests), runner (22 integration tests), config (edge cases), and provider (Gemini, retry) packages
+- **SetupError wrapping** — `add`, `init`, `validate` commands wrap setup errors for correct exit code 2
+- **CI improvements** — behavioral tests non-blocking (`continue-on-error`), rate-limit resilience
 
-## Reliability & Trust
+## Future Ideas
 
-- **Expand unit test coverage** — increase coverage for runner, config, and CLI packages
+Larger features that expand what axiom can do.
 
-## Cost & Performance
-
-- **Smarter concurrency defaults** — rate-limit-aware backoff at the runner level to avoid API quota spikes (basic auto-detection done; backoff pending)
 - **CI cache persistence** — document caching `.axiom/.cache/` for non-GitHub CI systems (GitHub Action handles this automatically)
-
-## Agent Quality
-
 - **Verbose tool tracing** (`axiom run --trace`) — log every tool call, its arguments, output size, and duration to a file for post-mortem debugging
 
 ## Future Ideas

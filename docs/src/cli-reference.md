@@ -27,6 +27,8 @@ If a test name is provided as a positional argument, only that test runs. This o
 | `--retries` | | `0` | Re-run failed tests up to N times; if a retry passes, mark as flaky |
 | `--dry-run` | | `false` | Preview which tests would run and estimate token cost |
 | `--watch` | `-w` | `false` | Watch for file changes and re-run affected tests |
+| `--strict` | | `false` | Treat flaky tests (passed on retry) as failures |
+| `--provider` | `-p` | | Override the LLM provider: `anthropic`, `openai`, or `gemini` |
 
 ### Examples
 
@@ -97,6 +99,7 @@ axiom add <intent> [flags]
 |------|-------|---------|-------------|
 | `--model` | `-m` | | Override LLM model |
 | `--file` | `-f` | `tests.yml` | Target YAML file inside `.axiom/` |
+| `--run` | | `false` | Run the new test immediately after adding |
 
 ### Examples
 
@@ -138,6 +141,7 @@ If a test name is provided, shows only that test's reasoning. Otherwise shows al
 |------|-------|---------|-------------|
 | `--dir` | `-d` | | Path to test directory |
 | `--json` | | `false` | Output as JSON |
+| `--diff` | | `false` | Show diff against previous reasoning |
 
 ### Examples
 
@@ -170,6 +174,14 @@ Checks for:
 - Invalid glob syntax in `on` patterns
 - Missing `on` patterns (tests that can never be cached)
 - Very short conditions (likely too vague)
+
+## axiom version
+
+Print the axiom version.
+
+```
+axiom version
+```
 
 ## axiom cache clear
 

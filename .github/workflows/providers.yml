@@ -38,6 +38,7 @@ jobs:
           cache: true
 
       - name: Run axiom test with ${{ matrix.provider }}
+        continue-on-error: true
         env:
           ${{ matrix.api_key_env }}: ${{ secrets[matrix.api_key_secret] }}
         run: |
