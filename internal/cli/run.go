@@ -25,6 +25,7 @@ func newRunCmd() *cobra.Command {
 		model       string
 		bail        bool
 		jsonOut     bool
+		format      string
 		concurrency int
 		retries     int
 		dryRun      bool
@@ -105,11 +106,20 @@ func newRunCmd() *cobra.Command {
 				return err
 			}
 
-			if jsonOut {
+			// --json is shorthand for --format json
+			outputFormat := format
+			if jsonOut && outputFormat == "text" {
+				outputFormat = "json"
+			}
+
+			switch outputFormat {
+			case "json":
 				if err := output.PrintJSON(results, cfg.Model); err != nil {
 					return err
 				}
-			} else {
+			case "github":
+				output.PrintGitHub(results, cfg.Model)
+			default:
 				output.Print(results, cfg.Model, verbose)
 			}
 
@@ -128,6 +138,7 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&model, "model", "m", "", "LLM model to use")
 	cmd.Flags().BoolVarP(&bail, "bail", "b", false, "Stop on first failure")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output results as JSON")
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text, json, or github")
 	cmd.Flags().IntVarP(&concurrency, "concurrency", "c", 0, "Number of tests to run in parallel (0 = auto)")
 	cmd.Flags().IntVar(&retries, "retries", 0, "Re-run failed tests up to N times; if a retry passes, mark as flaky")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview which tests would run vs be skipped and estimate token cost, without calling the API")

@@ -52,6 +52,13 @@ func TestShouldInjectBudgetHint(t *testing.T) {
 			maxTokens:    10000,
 			want:         false,
 		},
+		{
+			name:         "negative maxTokens disables hint",
+			inputTokens:  5000,
+			outputTokens: 5000,
+			maxTokens:    -1,
+			want:         false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -123,6 +130,37 @@ func TestParseVerdict(t *testing.T) {
 		{
 			name:       "verdict embedded in text",
 			text:       "After analysis, the VERDICT: FAIL because the output was incorrect.",
+			wantPassed: false,
+		},
+		{
+			name:       "verdict buried in longer text",
+			text:       "I looked at the code carefully.\nHere is my analysis of the files.\nAfter reviewing everything:\n\nVERDICT: PASS\nThe implementation looks correct.",
+			wantPassed: true,
+		},
+		{
+			name:          "multi-line reasoning after verdict",
+			text:          "VERDICT: FAIL\nLine 1 of reasoning\nLine 2 of reasoning",
+			wantPassed:    false,
+			wantReasoning: "Line 1 of reasoning\nLine 2 of reasoning",
+		},
+		{
+			name:      "whitespace only",
+			text:      "   \n\n\t  ",
+			noVerdict: true,
+		},
+		{
+			name:      "verdict-like but not exact",
+			text:      "My VERDICT is PASS",
+			noVerdict: true,
+		},
+		{
+			name:      "verdict with extra whitespace does not match",
+			text:      "VERDICT:   PASS   extra spaces",
+			noVerdict: true,
+		},
+		{
+			name:       "fail verdict at end of text",
+			text:       "After thorough analysis of the codebase\nVERDICT: FAIL",
 			wantPassed: false,
 		},
 	}
