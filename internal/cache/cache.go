@@ -1,6 +1,8 @@
 package cache
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -15,22 +17,32 @@ type Entry struct {
 	FileHashes map[string]string `json:"file_hashes"`
 	Result     string            `json:"result"` // "pass" or "fail"
 	Reasoning  string            `json:"reasoning,omitempty"`
+	ConfigHash string            `json:"config_hash,omitempty"`
 }
 
 type Cache struct {
-	dir     string
-	entries map[string]Entry
+	dir        string
+	entries    map[string]Entry
+	configHash string
 }
 
-func New(dir string) *Cache {
+// HashConfig returns a SHA-256 digest of the agent config fields that affect verdicts.
+func HashConfig(model string, maxIterations, maxTokens int) string {
+	h := sha256.New()
+	fmt.Fprintf(h, "%s:%d:%d", model, maxIterations, maxTokens)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func New(dir string, configHash string) *Cache {
 	return &Cache{
-		dir:     dir,
-		entries: make(map[string]Entry),
+		dir:        dir,
+		entries:    make(map[string]Entry),
+		configHash: configHash,
 	}
 }
 
-func Load(dir string) (*Cache, error) {
-	c := New(dir)
+func Load(dir string, configHash string) (*Cache, error) {
+	c := New(dir, configHash)
 	path := c.filePath()
 
 	data, err := os.ReadFile(path)
@@ -59,6 +71,10 @@ func (c *Cache) ShouldSkip(testName string, onGlobs []string, repoRoot string) (
 		return false, current
 	}
 
+	if entry.ConfigHash != c.configHash {
+		return false, current
+	}
+
 	if len(current) != len(entry.FileHashes) {
 		return false, current
 	}
@@ -77,6 +93,7 @@ func (c *Cache) Update(testName string, result string, fileHashes map[string]str
 		FileHashes: fileHashes,
 		Result:     result,
 		Reasoning:  reasoning,
+		ConfigHash: c.configHash,
 	}
 }
 

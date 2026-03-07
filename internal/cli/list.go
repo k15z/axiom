@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/fatih/color"
+	"github.com/k15z/axiom/internal/cache"
 	"github.com/k15z/axiom/internal/config"
 	"github.com/k15z/axiom/internal/discovery"
 	"github.com/k15z/axiom/internal/runner"
@@ -38,7 +39,8 @@ func newListCmd() *cobra.Command {
 			}
 
 			repoRoot, _ := filepath.Abs(".")
-			statuses := runner.GetStatuses(tests, cfg.Cache.Dir, repoRoot)
+			configHash := cache.HashConfig(cfg.Model, cfg.Agent.MaxIterations, cfg.Agent.MaxTokens)
+			statuses := runner.GetStatuses(tests, cfg.Cache.Dir, repoRoot, configHash)
 
 			gray := color.New(color.FgHiBlack)
 			green := color.New(color.FgGreen)
