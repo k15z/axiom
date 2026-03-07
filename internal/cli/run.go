@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 
 	"github.com/k15z/axiom/internal/cache"
@@ -12,6 +13,7 @@ import (
 	"github.com/k15z/axiom/internal/output"
 	"github.com/k15z/axiom/internal/runner"
 	"github.com/k15z/axiom/internal/types"
+	"github.com/k15z/axiom/internal/watch"
 	"github.com/spf13/cobra"
 )
 
@@ -26,6 +28,7 @@ func newRunCmd() *cobra.Command {
 		jsonOut     bool
 		concurrency int
 		dryRun      bool
+		watchMode   bool
 	)
 
 	cmd := &cobra.Command{
@@ -84,13 +87,22 @@ func newRunCmd() *cobra.Command {
 				return nil
 			}
 
-			results, err := runner.Run(context.Background(), cfg, tests, runner.Options{
+			opts := runner.Options{
 				All:         all,
 				Filter:      filter,
 				Bail:        bail,
 				Verbose:     verbose,
 				Concurrency: concurrency,
-			})
+			}
+
+			// Watch mode: run tests then poll for file changes
+			if watchMode {
+				ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+				defer stop()
+				return watch.Run(ctx, cfg, tests, opts)
+			}
+
+			results, err := runner.Run(context.Background(), cfg, tests, opts)
 			if err != nil {
 				return err
 			}
@@ -119,6 +131,7 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output results as JSON")
 	cmd.Flags().IntVarP(&concurrency, "concurrency", "c", 1, "Number of tests to run in parallel")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview which tests would run vs be skipped and estimate token cost, without calling the API")
+	cmd.Flags().BoolVarP(&watchMode, "watch", "w", false, "Watch for file changes and re-run affected tests")
 
 	return cmd
 }
