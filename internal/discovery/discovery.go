@@ -11,15 +11,23 @@ import (
 )
 
 type Test struct {
-	Name       string
-	On         []string
-	Condition  string
-	SourceFile string // relative path to the YAML file
+	Name          string
+	On            []string
+	Condition     string
+	Tags          []string
+	SourceFile    string // relative path to the YAML file
+	Model         string // per-test model override (empty = use global)
+	Timeout       int    // per-test timeout in seconds (0 = use global)
+	MaxIterations int    // per-test max_iterations (0 = use global)
 }
 
 type testDefinition struct {
-	On        []string `yaml:"on"`
-	Condition string   `yaml:"condition"`
+	On            []string `yaml:"on"`
+	Condition     string   `yaml:"condition"`
+	Tags          []string `yaml:"tags"`
+	Model         string   `yaml:"model"`
+	Timeout       int      `yaml:"timeout"`
+	MaxIterations int      `yaml:"max_iterations"`
 }
 
 func Discover(testDir string) ([]Test, error) {
@@ -92,10 +100,14 @@ func Discover(testDir string) ([]Test, error) {
 			seen[keyNode.Value] = file
 
 			tests = append(tests, Test{
-				Name:       keyNode.Value,
-				On:         def.On,
-				Condition:  def.Condition,
-				SourceFile: file,
+				Name:          keyNode.Value,
+				On:            def.On,
+				Condition:     def.Condition,
+				Tags:          def.Tags,
+				SourceFile:    file,
+				Model:         def.Model,
+				Timeout:       def.Timeout,
+				MaxIterations: def.MaxIterations,
 			})
 		}
 	}

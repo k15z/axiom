@@ -130,3 +130,77 @@ tracked:
 		t.Errorf("tests[0].On = %v, want 2 globs", tests[0].On)
 	}
 }
+
+func TestDiscover_PerTestOverrides(t *testing.T) {
+	t.Run("all overrides", func(t *testing.T) {
+		dir := t.TempDir()
+		writeYAML(t, dir, "overrides.yml", `
+full_override:
+  condition: "check something"
+  model: "claude-sonnet-4-20250514"
+  timeout: 120
+  max_iterations: 5
+  tags: ["ci", "fast"]
+`)
+		tests, err := Discover(dir)
+		if err != nil {
+			t.Fatalf("Discover() error: %v", err)
+		}
+		if len(tests) != 1 {
+			t.Fatalf("got %d tests, want 1", len(tests))
+		}
+		tt := tests[0]
+		if tt.Model != "claude-sonnet-4-20250514" {
+			t.Errorf("Model = %q, want %q", tt.Model, "claude-sonnet-4-20250514")
+		}
+		if tt.Timeout != 120 {
+			t.Errorf("Timeout = %d, want 120", tt.Timeout)
+		}
+		if tt.MaxIterations != 5 {
+			t.Errorf("MaxIterations = %d, want 5", tt.MaxIterations)
+		}
+		if len(tt.Tags) != 2 || tt.Tags[0] != "ci" || tt.Tags[1] != "fast" {
+			t.Errorf("Tags = %v, want [ci fast]", tt.Tags)
+		}
+	})
+
+	t.Run("partial overrides", func(t *testing.T) {
+		dir := t.TempDir()
+		writeYAML(t, dir, "partial.yml", `
+partial:
+  condition: "check partial"
+  timeout: 60
+`)
+		tests, err := Discover(dir)
+		if err != nil {
+			t.Fatalf("Discover() error: %v", err)
+		}
+		tt := tests[0]
+		if tt.Model != "" {
+			t.Errorf("Model = %q, want empty", tt.Model)
+		}
+		if tt.Timeout != 60 {
+			t.Errorf("Timeout = %d, want 60", tt.Timeout)
+		}
+		if tt.MaxIterations != 0 {
+			t.Errorf("MaxIterations = %d, want 0", tt.MaxIterations)
+		}
+	})
+
+	t.Run("no overrides", func(t *testing.T) {
+		dir := t.TempDir()
+		writeYAML(t, dir, "plain.yml", `
+plain:
+  condition: "just a condition"
+`)
+		tests, err := Discover(dir)
+		if err != nil {
+			t.Fatalf("Discover() error: %v", err)
+		}
+		tt := tests[0]
+		if tt.Model != "" || tt.Timeout != 0 || tt.MaxIterations != 0 || len(tt.Tags) != 0 {
+			t.Errorf("expected zero values, got model=%q timeout=%d maxIter=%d tags=%v",
+				tt.Model, tt.Timeout, tt.MaxIterations, tt.Tags)
+		}
+	})
+}

@@ -17,6 +17,8 @@ type TestResult struct {
 	Passed    bool
 	Cached    bool
 	Skipped   bool // true when skipped due to --bail
+	Flaky     bool // true when test passed only after retry
+	Retries   int  // number of retries attempted
 	Reasoning string
 	Duration  time.Duration
 	Usage     Usage

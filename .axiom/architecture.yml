@@ -1,4 +1,5 @@
 test_clean_package_dependencies:
+  tags: [architecture]
   on:
     - internal/**/*.go
   condition: >
@@ -9,6 +10,7 @@ test_clean_package_dependencies:
     No circular dependencies should exist.
 
 test_agent_tool_loop_terminates:
+  tags: [architecture, reliability]
   on:
     - internal/agent/agent.go
   condition: >

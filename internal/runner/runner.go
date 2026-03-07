@@ -20,9 +20,26 @@ import (
 type Options struct {
 	All         bool
 	Filter      string
+	Tag         string
 	Bail        bool
 	Verbose     bool
 	Concurrency int // ≤1 means sequential
+	Retries     int // re-run failed tests up to N times; 0 = no retries
+}
+
+func MatchesTag(t discovery.Test, tagFilter string) bool {
+	if tagFilter == "" {
+		return true
+	}
+	for _, w := range strings.Split(tagFilter, ",") {
+		w = strings.TrimSpace(w)
+		for _, tag := range t.Tags {
+			if strings.EqualFold(tag, w) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Options) ([]types.TestResult, error) {
@@ -40,8 +57,8 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 	}
 
 	concurrency := opts.Concurrency
-	if concurrency <= 1 {
-		concurrency = 1
+	if concurrency <= 0 {
+		concurrency = AutoConcurrency(len(tests))
 	}
 
 	// Bail support: cancel remaining tests on first failure
@@ -51,11 +68,15 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 	// Pre-compute total number of tests that will run (after filter)
 	total := 0
 	for _, t := range tests {
-		if opts.Filter == "" {
-			total++
-		} else if matched, _ := filepath.Match(opts.Filter, t.Name); matched {
-			total++
+		if opts.Filter != "" {
+			if matched, _ := filepath.Match(opts.Filter, t.Name); !matched {
+				continue
+			}
 		}
+		if !MatchesTag(t, opts.Tag) {
+			continue
+		}
+		total++
 	}
 
 	// Live display — one spinner line per running test
@@ -73,6 +94,9 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 			if matched, _ := filepath.Match(opts.Filter, test.Name); !matched {
 				continue
 			}
+		}
+		if !MatchesTag(test, opts.Tag) {
+			continue
 		}
 
 		// Cache check
@@ -141,16 +165,30 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 
 			start := time.Now()
 
+			// Per-test config overrides
+			testModel := cfg.Model
+			if t.Model != "" {
+				testModel = t.Model
+			}
+			testTimeout := cfg.Agent.Timeout
+			if t.Timeout > 0 {
+				testTimeout = t.Timeout
+			}
+			testMaxIter := cfg.Agent.MaxIterations
+			if t.MaxIterations > 0 {
+				testMaxIter = t.MaxIterations
+			}
+
 			// Per-test timeout
 			runCtx := ctx
-			if cfg.Agent.Timeout > 0 {
+			if testTimeout > 0 {
 				var timeoutCancel context.CancelFunc
-				runCtx, timeoutCancel = context.WithTimeout(ctx, time.Duration(cfg.Agent.Timeout)*time.Second)
+				runCtx, timeoutCancel = context.WithTimeout(ctx, time.Duration(testTimeout)*time.Second)
 				defer timeoutCancel()
 			}
 
-			result, err := agent.Run(runCtx, cfg.APIKey, cfg.Model, t.Condition, t.On, repoRoot, progress, agent.RunOptions{
-				MaxIterations: cfg.Agent.MaxIterations,
+			result, err := agent.Run(runCtx, cfg.APIKey, testModel, t.Condition, t.On, repoRoot, progress, agent.RunOptions{
+				MaxIterations: testMaxIter,
 				MaxTokens:     cfg.Agent.MaxTokens,
 				ToolTimeout:   time.Duration(cfg.Agent.ToolTimeout) * time.Second,
 			})
@@ -169,21 +207,55 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 				tr.Passed = result.Passed
 				tr.Reasoning = result.Reasoning
 			}
+
+			// Retry failed tests. If a retry passes, mark as flaky.
+			if !tr.Passed && opts.Retries > 0 {
+				for retry := 1; retry <= opts.Retries; retry++ {
+					select {
+					case <-ctx.Done():
+						break
+					default:
+					}
+					live.Update(t.Name, fmt.Sprintf("retrying (%d/%d)…", retry, opts.Retries))
+					retryResult, retryErr := agent.Run(runCtx, cfg.APIKey, testModel, t.Condition, t.On, repoRoot, progress, agent.RunOptions{
+						MaxIterations: testMaxIter,
+						MaxTokens:     cfg.Agent.MaxTokens,
+						ToolTimeout:   time.Duration(cfg.Agent.ToolTimeout) * time.Second,
+					})
+					tr.Duration = time.Since(start)
+					tr.Usage.InputTokens += retryResult.Usage.InputTokens
+					tr.Usage.OutputTokens += retryResult.Usage.OutputTokens
+					tr.Usage.APICalls += retryResult.Usage.APICalls
+					tr.Retries = retry
+					if retryErr == nil && retryResult.Passed {
+						tr.Passed = true
+						tr.Flaky = true
+						tr.Reasoning = retryResult.Reasoning
+						break
+					}
+					if retryErr != nil {
+						tr.Reasoning = "Agent error: " + retryErr.Error()
+					} else {
+						tr.Reasoning = retryResult.Reasoning
+					}
+				}
+			}
+
 			results[idx] = tr
 
-			live.FinishTest(t.Name, tr.Passed, false, false, duration)
+			live.FinishTest(t.Name, tr.Passed, false, false, tr.Duration)
 
 			cacheMu.Lock()
 			if c != nil {
 				res := "fail"
-				if err == nil && result.Passed {
+				if tr.Passed {
 					res = "pass"
 				}
 				c.Update(t.Name, res, cache.HashGlobs(t.On, repoRoot), tr.Reasoning)
 			}
 			cacheMu.Unlock()
 
-			if opts.Bail && err == nil && !result.Passed {
+			if opts.Bail && !tr.Passed {
 				cancel()
 			}
 		}()
