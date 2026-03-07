@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/k15z/axiom/internal/cache"
@@ -69,6 +70,9 @@ func newListCmd() *cobra.Command {
 				}
 
 				fmt.Printf("    %s ", s.Test.Name)
+				if len(s.Test.Tags) > 0 {
+					gray.Printf("[%s] ", strings.Join(s.Test.Tags, ", "))
+				}
 				c.Printf("[%s]\n", label)
 			}
 			fmt.Println()

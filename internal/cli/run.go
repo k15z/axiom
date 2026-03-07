@@ -19,12 +19,14 @@ func newRunCmd() *cobra.Command {
 	var (
 		all         bool
 		filter      string
+		tag         string
 		dir         string
 		verbose     bool
 		model       string
 		bail        bool
 		jsonOut     bool
 		concurrency int
+		retries     int
 		dryRun      bool
 	)
 
@@ -66,12 +68,18 @@ func newRunCmd() *cobra.Command {
 			if dryRun {
 				repoRoot, _ := filepath.Abs(".")
 				statuses := runner.GetStatuses(tests, cfg.Cache.Dir, repoRoot, cache.HashConfig(cfg.Model, cfg.Agent.MaxIterations, cfg.Agent.MaxTokens))
-				if filter != "" {
+				if filter != "" || tag != "" {
 					var filtered []types.TestStatus
 					for _, s := range statuses {
-						if matched, _ := filepath.Match(filter, s.Test.Name); matched {
-							filtered = append(filtered, s)
+						if filter != "" {
+							if matched, _ := filepath.Match(filter, s.Test.Name); !matched {
+								continue
+							}
 						}
+						if !runner.MatchesTag(s.Test, tag) {
+							continue
+						}
+						filtered = append(filtered, s)
 					}
 					statuses = filtered
 				}
@@ -87,9 +95,11 @@ func newRunCmd() *cobra.Command {
 			results, err := runner.Run(context.Background(), cfg, tests, runner.Options{
 				All:         all,
 				Filter:      filter,
+				Tag:         tag,
 				Bail:        bail,
 				Verbose:     verbose,
 				Concurrency: concurrency,
+				Retries:     retries,
 			})
 			if err != nil {
 				return err
@@ -112,12 +122,14 @@ func newRunCmd() *cobra.Command {
 
 	cmd.Flags().BoolVarP(&all, "all", "a", false, "Run all tests, ignoring cache")
 	cmd.Flags().StringVarP(&filter, "filter", "f", "", "Run tests matching a glob pattern")
+	cmd.Flags().StringVarP(&tag, "tag", "t", "", "Run tests matching any of the given tags (comma-separated)")
 	cmd.Flags().StringVarP(&dir, "dir", "d", "", "Path to test directory (default: .axiom/)")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show full agent reasoning (default: one-line summary)")
 	cmd.Flags().StringVarP(&model, "model", "m", "", "LLM model to use")
 	cmd.Flags().BoolVarP(&bail, "bail", "b", false, "Stop on first failure")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output results as JSON")
-	cmd.Flags().IntVarP(&concurrency, "concurrency", "c", 1, "Number of tests to run in parallel")
+	cmd.Flags().IntVarP(&concurrency, "concurrency", "c", 0, "Number of tests to run in parallel (0 = auto)")
+	cmd.Flags().IntVar(&retries, "retries", 0, "Re-run failed tests up to N times; if a retry passes, mark as flaky")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview which tests would run vs be skipped and estimate token cost, without calling the API")
 
 	return cmd

@@ -15,7 +15,8 @@ import (
 type Entry struct {
 	LastRun    time.Time         `json:"last_run"`
 	FileHashes map[string]string `json:"file_hashes"`
-	Result     string            `json:"result"` // "pass" or "fail"
+	Result     string            `json:"result"`                // "pass" or "fail"
+	PrevResult string            `json:"prev_result,omitempty"` // previous run's result for flaky detection
 	Reasoning  string            `json:"reasoning,omitempty"`
 	ConfigHash string            `json:"config_hash,omitempty"`
 }
@@ -88,13 +89,27 @@ func (c *Cache) ShouldSkip(testName string, onGlobs []string, repoRoot string) (
 }
 
 func (c *Cache) Update(testName string, result string, fileHashes map[string]string, reasoning string) {
+	prevResult := ""
+	if old, ok := c.entries[testName]; ok {
+		prevResult = old.Result
+	}
 	c.entries[testName] = Entry{
 		LastRun:    time.Now(),
 		FileHashes: fileHashes,
 		Result:     result,
+		PrevResult: prevResult,
 		Reasoning:  reasoning,
 		ConfigHash: c.configHash,
 	}
+}
+
+// IsFlaky returns true if the test's current and previous results differ.
+func (c *Cache) IsFlaky(testName string) bool {
+	entry, ok := c.entries[testName]
+	if !ok || entry.PrevResult == "" {
+		return false
+	}
+	return entry.Result != entry.PrevResult
 }
 
 func (c *Cache) Save() error {

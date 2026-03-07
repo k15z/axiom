@@ -1,4 +1,5 @@
 test_path_traversal_prevention:
+  tags: [security]
   on:
     - internal/agent/tools.go
   condition: >
@@ -9,6 +10,7 @@ test_path_traversal_prevention:
     must be rejected.
 
 test_no_arbitrary_command_execution:
+  tags: [security]
   on:
     - internal/agent/*.go
   condition: >

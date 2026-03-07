@@ -11,10 +11,11 @@ import (
 )
 
 var (
-	green = color.New(color.FgGreen)
-	red   = color.New(color.FgRed)
-	gray  = color.New(color.FgHiBlack)
-	bold  = color.New(color.Bold)
+	green  = color.New(color.FgGreen)
+	red    = color.New(color.FgRed)
+	yellow = color.New(color.FgYellow)
+	gray   = color.New(color.FgHiBlack)
+	bold   = color.New(color.Bold)
 )
 
 func Print(results []types.TestResult, model string, verbose bool) {
@@ -40,6 +41,17 @@ func Print(results []types.TestResult, model string, verbose bool) {
 				gray.Printf("    ○ %s (cached)\n", r.Test.Name)
 			case r.Skipped:
 				gray.Printf("    ○ %s (skipped)\n", r.Test.Name)
+			case r.Flaky:
+				yellow.Printf("    ⚠ ")
+				fmt.Printf("%s", r.Test.Name)
+				gray.Printf(" (flaky, passed on retry %d, %.1fs)\n", r.Retries, r.Duration.Seconds())
+				if r.Reasoning != "" {
+					if verbose {
+						printReasoning(r.Reasoning, "      ")
+					} else {
+						gray.Printf("      %s\n", firstLine(r.Reasoning))
+					}
+				}
 			case r.Passed:
 				green.Printf("    ✓ ")
 				fmt.Printf("%s", r.Test.Name)
@@ -64,7 +76,7 @@ func Print(results []types.TestResult, model string, verbose bool) {
 	}
 
 	// Summary
-	passed, failed, cached, skipped := 0, 0, 0, 0
+	passed, failed, cached, skipped, flaky := 0, 0, 0, 0, 0
 	var totalUsage types.Usage
 	for _, r := range results {
 		switch {
@@ -72,6 +84,8 @@ func Print(results []types.TestResult, model string, verbose bool) {
 			cached++
 		case r.Skipped:
 			skipped++
+		case r.Flaky:
+			flaky++
 		case r.Passed:
 			passed++
 		default:
@@ -86,6 +100,13 @@ func Print(results []types.TestResult, model string, verbose bool) {
 	parts := 0
 	if passed > 0 {
 		green.Printf("%d passed", passed)
+		parts++
+	}
+	if flaky > 0 {
+		if parts > 0 {
+			fmt.Print(" · ")
+		}
+		yellow.Printf("%d flaky", flaky)
 		parts++
 	}
 	if failed > 0 {
@@ -158,6 +179,8 @@ func PrintJSON(results []types.TestResult, model string) error {
 		File      string    `json:"file"`
 		Passed    bool      `json:"passed"`
 		Cached    bool      `json:"cached"`
+		Flaky     bool      `json:"flaky,omitempty"`
+		Retries   int       `json:"retries,omitempty"`
 		Reasoning string    `json:"reasoning,omitempty"`
 		Duration  float64   `json:"duration_seconds,omitempty"`
 		Usage     jsonUsage `json:"usage,omitempty"`
@@ -170,6 +193,8 @@ func PrintJSON(results []types.TestResult, model string) error {
 			File:      r.Test.SourceFile,
 			Passed:    r.Passed,
 			Cached:    r.Cached,
+			Flaky:     r.Flaky,
+			Retries:   r.Retries,
 			Reasoning: r.Reasoning,
 			Duration:  r.Duration.Seconds(),
 			Usage: jsonUsage{
