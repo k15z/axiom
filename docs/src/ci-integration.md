@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: k15z/axiom@main
+      - uses: k15z/axiom@v0
         with:
           api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
@@ -39,7 +39,7 @@ This handles everything: installing axiom and Go, restoring/saving the cache, ru
 ### Using with OpenAI or Gemini
 
 ```yaml
-- uses: k15z/axiom@main
+- uses: k15z/axiom@v0
   with:
     api_key: ${{ secrets.OPENAI_API_KEY }}
     provider: openai

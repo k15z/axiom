@@ -120,41 +120,27 @@ base_url: http://localhost:11434/v1
 export OPENAI_API_KEY=not-needed  # or set to any non-empty value
 ```
 
+### Streaming Behavior
+
+Anthropic streams results as the agent works -- you see live progress in the terminal (spinner updates, tool calls). OpenAI and Gemini do not stream; results appear after the agent finishes each response. This is a provider-level difference, not an axiom limitation. All three providers produce the same final output.
+
+If you're used to Anthropic's live feedback and switch to OpenAI or Gemini, tests may appear to "hang" before showing results. They're not stuck -- the provider just doesn't support incremental output.
+
 ## API Key
 
-Set the API key for your provider in one of two ways:
-
-### Environment Variable
+Set the API key for your provider via environment variable or `.env` file:
 
 ```bash
-# For Anthropic (default)
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# For OpenAI
-export OPENAI_API_KEY=sk-...
-
-# For Gemini
-export GEMINI_API_KEY=AIza...
+export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY, GEMINI_API_KEY
 ```
 
-### .env File
-
-Create a `.env` file in your project root:
+Or create a `.env` file in your project root:
 
 ```
-# For Anthropic
 ANTHROPIC_API_KEY=sk-ant-...
-
-# For OpenAI
-OPENAI_API_KEY=sk-...
-
-# For Gemini
-GEMINI_API_KEY=AIza...
 ```
 
-Axiom loads `.env` automatically. Existing environment variables take precedence over `.env` values. Supports both quoted and unquoted values.
-
-**Important:** Add `.env` to your `.gitignore` to avoid committing API keys.
+Axiom loads `.env` automatically. Environment variables take precedence over `.env` values. Add `.env` to your `.gitignore`.
 
 ## Per-Test Overrides
 

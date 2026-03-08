@@ -1,41 +1,37 @@
 # Getting Started
 
-## Prerequisites
-
-- Go 1.25 or later
-- An API key from [Anthropic](https://console.anthropic.com/) (default), [OpenAI](https://platform.openai.com/api-keys), or [Google Gemini](https://aistudio.google.com/apikey)
-
 ## Install
 
 ```bash
+# One-line install (macOS / Linux)
+curl -fsSL https://raw.githubusercontent.com/k15z/axiom/main/install.sh | sh
+
+# Homebrew
+brew tap k15z/homebrew-tap && brew install axiom
+
+# From source (requires Go 1.25+)
 go install github.com/k15z/axiom/cmd/axiom@latest
 ```
 
 ## Set Your API Key
 
-Create a `.env` file in your project root:
-
-```bash
-echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
-```
-
-Or export it directly:
+Axiom needs an API key from [Anthropic](https://console.anthropic.com/) (default), [OpenAI](https://platform.openai.com/api-keys), or [Google Gemini](https://aistudio.google.com/apikey).
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-Axiom loads `.env` automatically. Existing environment variables take precedence.
+Or create a `.env` file in your project root -- axiom loads it automatically. Environment variables take precedence.
 
 ## Your First Test
 
-From your project root:
+From your project root, describe what you want to verify:
 
 ```bash
-axiom add "all API routes require authentication"
+axiom add "all API routes require authentication" --run
 ```
 
-Axiom's agent explores your codebase, finds the relevant files, and generates a test:
+Axiom's agent explores your codebase, generates a test, and runs it immediately:
 
 ```yaml
 test_api_routes_require_authentication:
@@ -46,15 +42,11 @@ test_api_routes_require_authentication:
     Public endpoints (health checks, login, registration) are exempt.
 ```
 
-It shows you the generated YAML and asks for confirmation before writing it to disk. If multiple test files exist in `.axiom/`, it prompts you to pick one. After writing, it offers to run the test immediately.
+The `--run` flag skips prompts and runs the test right after generating it. Without `--run`, axiom shows you the generated YAML and asks for confirmation before writing.
 
-To skip the prompts and run right away:
+A typical test costs $0.01--0.05 with Haiku. Use `axiom run --dry-run` to estimate costs before running.
 
-```bash
-axiom add "all API routes require authentication" --run
-```
-
-A typical test costs $0.01--0.05 with Haiku, more with Sonnet or Opus. Use `axiom run --dry-run` to estimate costs before running.
+For inspiration, look at the [example tests](./examples.md) or browse the `.axiom/` directory in axiom's own repo -- those tests are real and demonstrate good patterns.
 
 ## Generate Tests Automatically
 

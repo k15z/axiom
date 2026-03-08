@@ -104,20 +104,32 @@ test_atomic_balance_updates:
     as this creates race conditions.
 ```
 
+### Making Conditions Falsifiable
+
+A condition is falsifiable if the agent can find concrete evidence that it doesn't hold. This is the bar: if there's no way for the agent to fail the test, it will always pass, and the test is worthless.
+
+**Falsifiable:** "All route handlers that access user data must call `verify_token()` or an equivalent auth check before reading `request.user`."
+The agent can grep for route handlers, check each one, and point to a specific handler that skips auth.
+
+**Not falsifiable:** "The authentication system should be secure."
+Secure how? Against what? The agent has no concrete check to perform, so it will say "looks fine" and pass.
+
+Ask yourself: "What would a failing test look like? Can I picture the agent pointing at a specific file and line and saying 'this violates the condition'?" If you can't picture it, rewrite the condition until you can.
+
 ### Bad Conditions
 
 Avoid vague, subjective, or unmeasurable conditions:
 
 ```yaml
-# BAD: too vague
+# BAD: too vague -- what does "clean" mean?
 test_code_quality:
   condition: "The code should be clean and well-organized"
 
-# BAD: subjective
+# BAD: subjective -- the agent will always say "looks reasonable"
 test_good_naming:
   condition: "Variable names should be descriptive"
 
-# BAD: no concrete pattern to verify
+# BAD: not falsifiable -- no concrete check the agent can perform
 test_performance:
   condition: "The application should be fast"
 ```
@@ -125,18 +137,30 @@ test_performance:
 Also avoid over-specified conditions that dictate implementation details:
 
 ```yaml
-# BAD: prescribes exact implementation
+# BAD: prescribes exact implementation -- breaks if you change the pattern
 test_errors:
   condition: >
     Functions must wrap errors using fmt.Errorf("description: %w", err).
     Check that all error return paths use the %w verb.
 
-# BAD: lists specific names that may change
+# BAD: hardcodes a list that goes stale when you add packages
 test_imports:
   condition: >
     The agent package must not import internal/cli, internal/runner,
     internal/output, internal/discovery, or internal/cache.
 ```
+
+### Common Mistakes
+
+**Conditions that always pass.** If your condition describes something broadly true of any reasonable codebase, it will pass without actually verifying anything useful. "The codebase should handle errors" passes everywhere because every codebase handles *some* errors. Be specific: "Functions that call external APIs must handle connection timeouts and return an error, not panic."
+
+**Testing the wrong layer.** Don't use axiom to check things your compiler, linter, or type checker already catches. "All variables should be typed" is a waste of API calls in a statically typed language. Axiom is for properties that *can't* be expressed as lint rules or unit tests.
+
+**Conditions that test existence, not behavior.** "There should be an auth middleware" always passes if an auth file exists -- even if no route uses it. Better: "All route handlers that modify data must pass through authentication middleware before executing."
+
+**Overly broad `on` patterns.** `on: ["**/*"]` means every file change invalidates the cache. Your test re-runs on every commit regardless of relevance. Narrow to the files that actually matter: `on: ["src/routes/**/*.py", "src/middleware/**/*.py"]`.
+
+**Compound conditions that hide failures.** "All API routes require auth AND all database queries are parameterized" is two tests crammed into one. If the first property holds but the second doesn't, the agent may still pass the test because it spent most of its budget verifying auth. Split compound properties into separate tests.
 
 ## The `on` Field
 

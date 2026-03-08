@@ -1,98 +1,61 @@
 # Axiom vs Other Tools
 
-Axiom occupies a unique space -- it verifies behavioral properties of code using an LLM agent. Here's how it compares to tools you might already use.
+Axiom isn't trying to replace your linter or your test suite. It fills a gap: verifying behavioral properties that span multiple files and require understanding intent, not just matching patterns.
 
-## Axiom vs Linters (ESLint, golangci-lint, Pylint)
+Here's how it fits alongside tools you probably already use.
 
-**Linters** check for syntactic patterns, style violations, and known anti-patterns using static rules.
+## vs Linters (ESLint, golangci-lint, Pylint)
 
-**Axiom** verifies semantic properties that span multiple files and require understanding code behavior.
+Linters match syntactic patterns within single files. They're fast, cheap, and catch a lot. But they can't reason about behavior across files.
 
-| | Linters | Axiom |
+A linter can flag `eval()`. Axiom can verify that no user input reaches `eval()` after passing through your sanitizer pipeline -- a property that requires tracing data flow across modules.
+
+**Use both.** Linters for surface-level hygiene, axiom for the cross-cutting properties linters can't express.
+
+## vs ArchUnit / ArchUnitNET
+
+ArchUnit is the closest tool to axiom for architectural testing. It enforces rules like "classes in package X should not depend on package Y" using Java/C# test code. It's deterministic, free, and deeply integrated with the JVM ecosystem.
+
+The tradeoffs are real:
+
+- ArchUnit is language-specific (Java, C#). Axiom works on any codebase.
+- ArchUnit rules are code. Axiom tests are plain English. This changes who can write and review them.
+- ArchUnit checks import graphs and annotations. Axiom can check anything the agent can reason about -- security properties, error handling patterns, concurrency safety.
+- ArchUnit is deterministic. Axiom uses an LLM, which means results are cached for consistency but not guaranteed identical across model versions.
+
+If you're in a Java shop and your constraints are purely structural (package dependencies, naming conventions, annotation usage), ArchUnit is the better tool. If you need to verify behavioral properties -- "all database connections are closed in error paths," "no API route bypasses rate limiting" -- or you work across languages, axiom is the better fit.
+
+## vs Semgrep
+
+Semgrep does structural pattern matching on ASTs. It's like grep but language-aware -- it understands syntax trees, not just text. It's excellent for finding known vulnerability patterns and enforcing code conventions at scale.
+
+Axiom reasons about code behavior and intent. "Find all `db.query(f'...')` calls" is a Semgrep rule. "All database queries use parameterized statements -- no raw string interpolation should construct SQL" is an axiom test. The axiom version catches f-strings, `.format()`, `%` formatting, and any other interpolation pattern the agent encounters, without you enumerating them.
+
+Semgrep is free, fast, and deterministic. Axiom costs money per run (cached after passing). Use Semgrep for known patterns you can express structurally. Use axiom for higher-level properties that require understanding context and intent.
+
+## vs Code Review
+
+The honest comparison: axiom automates the repeatable parts of what a senior engineer does in code review. "Did someone bypass auth?" "Are errors wrapped with context?" "Does the agent package stay isolated from the CLI layer?"
+
+Code review catches everything a human notices, but it's slow, inconsistent across reviewers, and doesn't scale. Axiom checks the same properties on every commit, the same way, every time.
+
+Axiom doesn't replace code review. It frees reviewers to focus on design, clarity, and edge cases instead of re-checking known invariants.
+
+## vs Unit Tests
+
+Unit tests verify that `hashPassword('abc')` returns a 64-char hex string. Axiom tests verify that all passwords are hashed before storage -- that no plaintext password reaches the database layer anywhere in the codebase.
+
+Different scope, different purpose. Unit tests cover function-level correctness. Axiom covers cross-cutting properties that span files and packages. Use both.
+
+## When to Use What
+
+| Tool | Best for | Doesn't do |
 |---|---|---|
-| **What it checks** | Syntax, style, known patterns | Behavioral invariants, architectural intent |
-| **Scope** | Single file at a time | Cross-file, cross-package analysis |
-| **Configuration** | Rules with parameters | Plain English conditions |
-| **Example** | "Don't use `eval()`" | "No user input reaches `eval()` after passing through the sanitizer" |
+| **Linters** | Style, syntax, known anti-patterns | Cross-file reasoning |
+| **ArchUnit** | Java/C# import graphs, annotations | Behavioral properties, non-JVM languages |
+| **Semgrep** | Structural pattern matching at scale | Reasoning about intent or context |
+| **Code review** | Everything, eventually | Consistency, speed, scale |
+| **Unit tests** | Function-level correctness | Cross-cutting codebase properties |
+| **Axiom** | Behavioral invariants, architecture, security | Deterministic guarantees, free |
 
-**Use both.** Linters catch surface-level issues cheaply. Axiom catches the deeper properties that linters can't express.
-
-## Axiom vs ArchUnit / ArchUnitNET
-
-**ArchUnit** enforces architectural rules in Java/C# using code-based test definitions (e.g., "classes in package X should not depend on package Y").
-
-**Axiom** does similar work but uses natural language instead of a language-specific API, and works across any language.
-
-| | ArchUnit | Axiom |
-|---|---|---|
-| **Languages** | Java, C# | Any language |
-| **Test format** | Java/C# code | YAML with plain English |
-| **What it checks** | Package dependencies, naming, annotations | Any behavioral property describable in English |
-| **Setup** | Add library dependency, write tests in code | Install binary, write YAML |
-| **Determinism** | Fully deterministic | LLM-based (cached for consistency) |
-
-**Choose ArchUnit** if you're in a Java/C# shop and want deterministic, zero-cost architectural checks.
-
-**Choose Axiom** if you work across languages, want to express nuanced properties in English, or need to check things beyond import graphs (security invariants, concurrency safety, error handling patterns).
-
-## Axiom vs Semgrep
-
-**Semgrep** matches code patterns using structural rules (like regex for ASTs). It excels at finding specific code patterns across a codebase.
-
-**Axiom** reasons about code behavior and intent, not just pattern matching.
-
-| | Semgrep | Axiom |
-|---|---|---|
-| **How it works** | AST pattern matching | LLM agent explores code |
-| **Rules** | Pattern syntax (language-aware) | Plain English |
-| **Strengths** | Finding specific code patterns fast | Verifying behavioral properties that require understanding context |
-| **Cost** | Free (open source) | API costs per run (cached) |
-| **Example** | "Find `db.query(f'...')` calls" | "All database queries use parameterized statements -- no raw string interpolation should construct SQL" |
-
-**Use Semgrep** for known vulnerability patterns, taint tracking, and enforcing specific code patterns at scale.
-
-**Use Axiom** for higher-level properties that require understanding code flow, architecture, and intent -- things that can't be expressed as a single pattern.
-
-## Axiom vs Manual Code Review
-
-**Code review** catches architectural violations, security issues, and design problems. But it's slow, inconsistent, and doesn't scale.
-
-**Axiom** automates the kinds of checks that senior engineers do in code review.
-
-| | Code Review | Axiom |
-|---|---|---|
-| **Speed** | Hours to days | Seconds to minutes |
-| **Consistency** | Varies by reviewer | Same check every time (cached) |
-| **Coverage** | Reviewers focus on the diff | Checks the full codebase |
-| **Cost** | Engineer time | API costs |
-| **Catches** | Everything a human notices | Properties you've defined |
-
-**Axiom doesn't replace code review.** It automates the repeatable parts -- "did someone bypass auth?", "are all errors wrapped?", "does the agent package stay isolated?" -- so reviewers can focus on design, clarity, and edge cases.
-
-## Axiom vs Unit Tests
-
-**Unit tests** verify that specific functions produce expected outputs for given inputs.
-
-**Axiom tests** verify that structural and behavioral properties hold across the codebase.
-
-| | Unit Tests | Axiom |
-|---|---|---|
-| **What it tests** | Function behavior | Codebase properties |
-| **Scope** | Single function/module | Cross-cutting concerns |
-| **Example** | "`hashPassword('abc')` returns a 64-char hex string" | "All passwords are hashed before storage -- no plaintext passwords should reach the database layer" |
-| **When it runs** | Every commit (fast) | Every commit or PR (slower, cached) |
-
-**Use both.** Unit tests verify implementation correctness. Axiom tests verify that architectural intent is maintained as the codebase evolves.
-
-## Summary
-
-| Tool | Best For | Limitation |
-|---|---|---|
-| **Linters** | Style, syntax, known patterns | Can't reason about behavior |
-| **ArchUnit** | Java/C# architecture rules | Language-specific, import-graph only |
-| **Semgrep** | Code pattern matching | Can't reason about intent or context |
-| **Code Review** | Everything | Slow, inconsistent, doesn't scale |
-| **Unit Tests** | Function-level correctness | Can't check cross-cutting properties |
-| **Axiom** | Behavioral invariants, architecture, security | API cost, LLM non-determinism |
-
-The best setup uses axiom alongside your existing tools -- linters for cheap surface checks, unit tests for correctness, semgrep for known patterns, and axiom for the behavioral properties that only a human (or LLM) can verify.
+The best setup: linters for cheap hygiene, unit tests for correctness, semgrep for known patterns, and axiom for the behavioral properties that only a human -- or an LLM -- can verify.

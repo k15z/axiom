@@ -4,6 +4,7 @@
 
 # User Guide
 
+- [Thinking in Axiom](./mental-model.md)
 - [Getting Started](./getting-started.md)
 - [Writing Tests](./writing-tests.md)
 - [Examples](./examples.md)
