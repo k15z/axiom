@@ -2,6 +2,9 @@ package provider
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -157,6 +160,56 @@ func TestGeminiConvertMessage_TextAndToolResult(t *testing.T) {
 	if contents[1].Parts[0].FunctionResponse == nil {
 		t.Error("second content should have FunctionResponse")
 	}
+}
+
+func TestGeminiDoRequest_StripsGooglePrefix(t *testing.T) {
+	var requestedPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"candidates":[{"content":{"role":"model","parts":[{"text":"VERDICT: PASS"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":5}}`))
+	}))
+	defer srv.Close()
+
+	// Swap out the transport so requests to geminiBaseURL go to our test server
+	p := &GeminiProvider{
+		apiKey: "test-key",
+		client: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				// Capture the path, then forward to our test server
+				requestedPath = req.URL.Path
+				req.URL.Scheme = "http"
+				req.URL.Host = strings.TrimPrefix(srv.URL, "http://")
+				return http.DefaultTransport.RoundTrip(req)
+			}),
+		},
+	}
+
+	_, err := p.Chat(t.Context(), ChatParams{
+		Model:     "google/gemini-2.0-flash",
+		System:    "test",
+		Messages:  []Message{{Role: "user", Content: []ContentBlock{{Type: "text", Text: "hello"}}}},
+		MaxTokens: 100,
+	})
+	if err != nil {
+		t.Fatalf("Chat failed: %v", err)
+	}
+
+	// The URL path should NOT contain "google/" -- stripGooglePrefix should remove it
+	if strings.Contains(requestedPath, "google/") {
+		t.Errorf("request path %q still contains 'google/' prefix; stripGooglePrefix not applied", requestedPath)
+	}
+	wantSuffix := "/models/gemini-2.0-flash:generateContent"
+	if !strings.HasSuffix(requestedPath, wantSuffix) {
+		t.Errorf("request path = %q, want suffix %q", requestedPath, wantSuffix)
+	}
+}
+
+// roundTripFunc adapts a function to http.RoundTripper.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }
 
 func TestStripGooglePrefix(t *testing.T) {

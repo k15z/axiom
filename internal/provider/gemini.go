@@ -228,7 +228,7 @@ func (p *GeminiProvider) doRequest(ctx context.Context, model string, req gemini
 		return nil, fmt.Errorf("marshaling request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/models/%s:generateContent", geminiBaseURL, model)
+	url := fmt.Sprintf("%s/models/%s:generateContent", geminiBaseURL, stripGooglePrefix(model))
 
 	return WithRetry(ctx, func() (*geminiResponse, error) {
 		httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
