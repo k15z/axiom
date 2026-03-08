@@ -124,11 +124,35 @@ wayzn/
   wayzn.example.json    # Example config file
 ```
 
+## Particle Cloud Shortcut
+
+The Wayzn prototype was built on a **Particle Photon** (confirmed via their Republic crowdfunding page). If the production device still uses Particle hardware (FCC ID `2AEMI-PHOTON`), you may be able to skip traffic capture entirely:
+
+1. **Check the device PCB** for a Particle Photon or P1 module (small blue board with "Particle" branding)
+2. If confirmed, the device communicates via **Particle Cloud** (CoAP over DTLS), which has a documented REST API
+3. You need your Particle **device ID** (printed on the module or visible via `particle list`) and an **access token**
+
+If your Wayzn uses Particle, you can call the Particle Cloud API directly:
+```bash
+# List your Particle devices (if you can claim the device)
+curl https://api.particle.io/v1/devices?access_token=YOUR_TOKEN
+
+# Call a function on the device
+curl https://api.particle.io/v1/devices/DEVICE_ID/open \
+  -d access_token=YOUR_TOKEN
+
+# Read a variable
+curl https://api.particle.io/v1/devices/DEVICE_ID/doorState?access_token=YOUR_TOKEN
+```
+
+The function and variable names (`open`, `close`, `doorState`) are guesses — the capture script will reveal the actual names.
+
 ## Tips
 
 - **Token expiry**: Auth tokens may expire. If commands stop working, re-capture traffic from the app to get a fresh token.
 - **Certificate pinning**: If the Wayzn app uses certificate pinning, you'll need to bypass it. On a rooted Android device, use Frida with `frida-android-unpinning`. On iOS, use SSL Kill Switch 2.
 - **Alexa integration**: If you have Alexa linked, the Alexa Smart Home API calls may reveal additional endpoints.
+- **Particle Cloud**: If traffic capture shows requests to `api.particle.io`, you've confirmed Particle hardware. See the [Particle Cloud API docs](https://docs.particle.io/reference/cloud-apis/api/).
 - **Alternative approach**: If MITM capture fails due to cert pinning, try decompiling the APK (`com.wayzn.android`) with JADX to find hardcoded API URLs.
 
 ## Security
