@@ -29,7 +29,10 @@ func newCacheClearCmd() *cobra.Command {
 		Use:   "clear",
 		Short: "Clear the test cache",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg := config.LoadMinimal(dir)
+			cfg, err := config.LoadMinimal(dir)
+			if err != nil {
+				return &SetupError{Err: err}
+			}
 			if err := runner.ClearCache(cfg.Cache.Dir); err != nil {
 				return fmt.Errorf("clearing cache: %w", err)
 			}
@@ -49,7 +52,10 @@ func newCacheInfoCmd() *cobra.Command {
 		Use:   "info",
 		Short: "Show cache statistics",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg := config.LoadMinimal(dir)
+			cfg, err := config.LoadMinimal(dir)
+			if err != nil {
+				return &SetupError{Err: err}
+			}
 
 			configHash := cache.HashConfig(cfg.Model, cfg.Agent.MaxIterations, cfg.Agent.MaxTokens, cfg.Provider, cfg.BaseURL)
 			c, err := cache.Load(cfg.Cache.Dir, configHash)
@@ -63,7 +69,7 @@ func newCacheInfoCmd() *cobra.Command {
 			red := color.New(color.FgRed)
 
 			if len(entries) == 0 {
-				fmt.Println("Cache is empty.")
+				fmt.Println("Cache is empty. Run `axiom run` to populate it.")
 				return nil
 			}
 

@@ -43,7 +43,7 @@ Examples:
 			intent := args[0]
 
 			// Load config for model default and test_dir
-			cfg, err := config.Load("")
+			cfg, err := config.Load(config.LoadOpts{ResolveKey: true})
 			if err != nil {
 				return &SetupError{Err: err}
 			}
@@ -213,7 +213,7 @@ func runNewTest(cfg config.Config, testName string) error {
 		return err
 	}
 
-	output.Print(results, cfg.Model, false, cfg.TestDir)
+	output.Print(results, cfg.Model, false, cfg.TestDir, false)
 
 	if output.HasFailures(results) {
 		os.Exit(1)

@@ -18,7 +18,7 @@ var (
 	bold   = color.New(color.Bold)
 )
 
-func Print(results []types.TestResult, model string, verbose bool, testDir string) {
+func Print(results []types.TestResult, model string, verbose bool, testDir string, costs bool) {
 	fmt.Println()
 	bold.Println("  axiom")
 	fmt.Println()
@@ -45,8 +45,9 @@ func Print(results []types.TestResult, model string, verbose bool, testDir strin
 				red.Printf("    ! ")
 				fmt.Printf("%s", r.Test.Name)
 				gray.Printf(" (error, %.1fs)\n", r.Duration.Seconds())
+				printCondition(r.Test.Condition, "      ")
 				if r.Reasoning != "" {
-					printReasoning(r.Reasoning, "      ")
+					printFailureReasoning(r.Reasoning, "      ")
 				}
 			case r.Flaky:
 				yellow.Printf("    ⚠ ")
@@ -74,9 +75,18 @@ func Print(results []types.TestResult, model string, verbose bool, testDir strin
 				red.Printf("    ✗ ")
 				fmt.Printf("%s", r.Test.Name)
 				gray.Printf(" (%.1fs)\n", r.Duration.Seconds())
+				printCondition(r.Test.Condition, "      ")
 				if r.Reasoning != "" {
-					printReasoning(r.Reasoning, "      ")
+					printFailureReasoning(r.Reasoning, "      ")
 				}
+			}
+			if costs && r.Usage.APICalls > 0 {
+				cost := estimateCost(model, r.Usage.InputTokens, r.Usage.OutputTokens)
+				gray.Printf("      %d calls · %s in · %s out · ~$%.4f\n",
+					r.Usage.APICalls,
+					formatTokens(r.Usage.InputTokens),
+					formatTokens(r.Usage.OutputTokens),
+					cost)
 			}
 		}
 		fmt.Println()
@@ -206,7 +216,7 @@ func PrintJSON(results []types.TestResult, model string) error {
 		Retries   int       `json:"retries,omitempty"`
 		Reasoning string    `json:"reasoning,omitempty"`
 		Duration  float64   `json:"duration_seconds,omitempty"`
-		Usage     jsonUsage `json:"usage,omitempty"`
+		Usage     jsonUsage `json:"usage"`
 	}
 
 	var out []jsonResult
@@ -247,10 +257,31 @@ func firstLine(s string) string {
 }
 
 func printReasoning(reasoning, indent string) {
-	lines := strings.Split(strings.TrimSpace(reasoning), "\n")
-	for _, line := range lines {
+	for line := range strings.SplitSeq(strings.TrimSpace(reasoning), "\n") {
 		gray.Printf("%s%s\n", indent, line)
 	}
+}
+
+// printFailureReasoning prints reasoning in default text color instead of gray,
+// so failure details stand out from cached/skipped/passed output.
+func printFailureReasoning(reasoning, indent string) {
+	for line := range strings.SplitSeq(strings.TrimSpace(reasoning), "\n") {
+		fmt.Printf("%s%s\n", indent, line)
+	}
+}
+
+// printCondition prints the test condition in gray, indented, so the user can
+// see what was being evaluated alongside the verdict.
+func printCondition(condition, indent string) {
+	if condition == "" {
+		return
+	}
+	// Collapse the condition to a single line for compact display
+	collapsed := strings.Join(strings.Fields(condition), " ")
+	if len(collapsed) > 120 {
+		collapsed = collapsed[:117] + "..."
+	}
+	gray.Printf("%scondition: %s\n", indent, collapsed)
 }
 
 // estimateCost returns estimated cost in USD based on model pricing.

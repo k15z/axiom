@@ -28,6 +28,7 @@ func Execute() {
 		var se *SetupError
 		if errors.As(err, &se) {
 			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			fmt.Fprintf(os.Stderr, "Hint: run `axiom doctor` to diagnose setup issues.\n")
 			os.Exit(2)
 		}
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
@@ -51,6 +52,7 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(newShowCmd())
 	root.AddCommand(newCacheCmd())
 	root.AddCommand(newValidateCmd())
+	root.AddCommand(newDoctorCmd())
 	root.AddCommand(newVersionCmd())
 
 	return root

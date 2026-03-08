@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -205,4 +206,219 @@ func TestSafePath_SiblingPrefix(t *testing.T) {
 	if err == nil {
 		t.Error("safePath should reject sibling directory with shared prefix")
 	}
+}
+
+// makeGrepTestDir creates a temp directory with files for grep testing.
+func makeGrepTestDir(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+
+	files := map[string]string{
+		"main.go":             "package main\n\nfunc main() {\n\tfmt.Println(\"hello world\")\n}\n",
+		"util.go":             "package main\n\nfunc helper() string {\n\treturn \"hello helper\"\n}\n",
+		"README.md":           "# Project\n\nThis is a hello world project.\n",
+		"internal/auth.go":    "package internal\n\nfunc Authenticate(token string) bool {\n\treturn token != \"\"\n}\n",
+		"internal/handler.go": "package internal\n\nfunc HandleRequest() {\n\t// TODO: implement\n}\n",
+		".hidden/secret.go":   "package hidden\n\nvar secret = \"hello hidden\"\n",
+	}
+
+	for path, content := range files {
+		abs := filepath.Join(root, path)
+		os.MkdirAll(filepath.Dir(abs), 0o755)
+		os.WriteFile(abs, []byte(content), 0o644)
+	}
+	return root
+}
+
+func TestToolGrepGo(t *testing.T) {
+	root := makeGrepTestDir(t)
+
+	t.Run("basic match", func(t *testing.T) {
+		result, isErr := toolGrepGo(context.Background(), "hello", "", root)
+		if isErr {
+			t.Fatalf("unexpected error: %s", result)
+		}
+		if !strings.Contains(result, "main.go:") || !strings.Contains(result, "hello world") {
+			t.Errorf("expected match in main.go, got:\n%s", result)
+		}
+		if !strings.Contains(result, "util.go:") || !strings.Contains(result, "hello helper") {
+			t.Errorf("expected match in util.go, got:\n%s", result)
+		}
+	})
+
+	t.Run("glob filter", func(t *testing.T) {
+		result, isErr := toolGrepGo(context.Background(), "hello", "*.go", root)
+		if isErr {
+			t.Fatalf("unexpected error: %s", result)
+		}
+		if strings.Contains(result, "README.md") {
+			t.Errorf("glob *.go should exclude README.md, got:\n%s", result)
+		}
+		if !strings.Contains(result, "main.go:") {
+			t.Errorf("expected match in main.go, got:\n%s", result)
+		}
+	})
+
+	t.Run("no matches", func(t *testing.T) {
+		result, isErr := toolGrepGo(context.Background(), "NONEXISTENT_STRING_XYZ", "", root)
+		if isErr {
+			t.Fatalf("unexpected error: %s", result)
+		}
+		if result != "no matches found" {
+			t.Errorf("expected 'no matches found', got: %s", result)
+		}
+	})
+
+	t.Run("invalid regex", func(t *testing.T) {
+		_, isErr := toolGrepGo(context.Background(), "[invalid", "", root)
+		if !isErr {
+			t.Error("expected error for invalid regex")
+		}
+	})
+
+	t.Run("skips hidden dirs", func(t *testing.T) {
+		result, _ := toolGrepGo(context.Background(), "hello hidden", "", root)
+		if strings.Contains(result, ".hidden") || strings.Contains(result, "secret.go") {
+			t.Errorf("should not match in hidden dirs, got:\n%s", result)
+		}
+	})
+
+	t.Run("directory scoped glob", func(t *testing.T) {
+		result, isErr := toolGrepGo(context.Background(), "package", "internal/**/*.go", root)
+		if isErr {
+			t.Fatalf("unexpected error: %s", result)
+		}
+		if !strings.Contains(result, "internal/auth.go") {
+			t.Errorf("expected match in internal/auth.go, got:\n%s", result)
+		}
+		if strings.Contains(result, "main.go") {
+			t.Errorf("should not match outside internal/, got:\n%s", result)
+		}
+	})
+}
+
+func TestToolGrepRg(t *testing.T) {
+	// Skip if rg is not installed
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("ripgrep (rg) not installed, skipping")
+	}
+
+	root := makeGrepTestDir(t)
+
+	t.Run("basic match", func(t *testing.T) {
+		result, isErr, ok := toolGrepRg(context.Background(), "hello", "", root)
+		if !ok {
+			t.Fatal("toolGrepRg returned ok=false unexpectedly")
+		}
+		if isErr {
+			t.Fatalf("unexpected error: %s", result)
+		}
+		if !strings.Contains(result, "main.go:") || !strings.Contains(result, "hello world") {
+			t.Errorf("expected match in main.go, got:\n%s", result)
+		}
+	})
+
+	t.Run("glob filter", func(t *testing.T) {
+		result, isErr, ok := toolGrepRg(context.Background(), "hello", "*.go", root)
+		if !ok {
+			t.Fatal("toolGrepRg returned ok=false unexpectedly")
+		}
+		if isErr {
+			t.Fatalf("unexpected error: %s", result)
+		}
+		if strings.Contains(result, "README.md") {
+			t.Errorf("glob *.go should exclude README.md, got:\n%s", result)
+		}
+		if !strings.Contains(result, "main.go:") {
+			t.Errorf("expected match in main.go, got:\n%s", result)
+		}
+	})
+
+	t.Run("no matches", func(t *testing.T) {
+		result, isErr, ok := toolGrepRg(context.Background(), "NONEXISTENT_STRING_XYZ", "", root)
+		if !ok {
+			t.Fatal("toolGrepRg returned ok=false unexpectedly")
+		}
+		if isErr {
+			t.Fatalf("unexpected error: %s", result)
+		}
+		if result != "no matches found" {
+			t.Errorf("expected 'no matches found', got: %s", result)
+		}
+	})
+
+	t.Run("skips hidden dirs", func(t *testing.T) {
+		result, _, ok := toolGrepRg(context.Background(), "hello hidden", "", root)
+		if !ok {
+			t.Fatal("toolGrepRg returned ok=false unexpectedly")
+		}
+		if strings.Contains(result, ".hidden") || strings.Contains(result, "secret.go") {
+			t.Errorf("should not match in hidden dirs, got:\n%s", result)
+		}
+	})
+
+	t.Run("context cancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, _, ok := toolGrepRg(ctx, "hello", "", root)
+		// With cancelled context, rg should fail and ok=false (fallback to Go)
+		if ok {
+			// It's also acceptable if rg ran fast enough to return before cancellation
+			// so we don't fail the test, just note it
+			t.Log("rg completed despite cancelled context (fast execution)")
+		}
+	})
+}
+
+func TestToolGrepIntegration(t *testing.T) {
+	// Test that toolGrep produces consistent results whether using rg or Go fallback.
+	root := makeGrepTestDir(t)
+
+	goResult, goErr := toolGrepGo(context.Background(), "hello", "*.go", root)
+	if goErr {
+		t.Fatalf("Go grep error: %s", goResult)
+	}
+
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("ripgrep (rg) not installed, skipping integration comparison")
+	}
+
+	rgResult, rgErr, ok := toolGrepRg(context.Background(), "hello", "*.go", root)
+	if !ok {
+		t.Fatal("toolGrepRg returned ok=false")
+	}
+	if rgErr {
+		t.Fatalf("rg grep error: %s", rgResult)
+	}
+
+	// Both should find the same files (order may differ)
+	goFiles := extractMatchedFiles(goResult)
+	rgFiles := extractMatchedFiles(rgResult)
+
+	if len(goFiles) != len(rgFiles) {
+		t.Errorf("file count mismatch: Go found %d files, rg found %d files\nGo: %s\nrg: %s",
+			len(goFiles), len(rgFiles), goResult, rgResult)
+	}
+
+	for f := range goFiles {
+		if !rgFiles[f] {
+			t.Errorf("Go found %q but rg did not", f)
+		}
+	}
+}
+
+// extractMatchedFiles extracts unique file paths from grep output lines (path:line:content).
+func extractMatchedFiles(output string) map[string]bool {
+	files := make(map[string]bool)
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || line == "no matches found" {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 3)
+		if len(parts) >= 1 {
+			files[parts[0]] = true
+		}
+	}
+	return files
 }

@@ -19,14 +19,17 @@ func newValidateCmd() *cobra.Command {
 		Short: "Lint test YAML files for structural issues",
 		Long:  "Checks glob syntax, warns on missing 'on' patterns (tests that can never cache), and flags short/vague conditions.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg := config.LoadMinimal(dir)
+			cfg, err := config.LoadMinimal(dir)
+			if err != nil {
+				return &SetupError{Err: err}
+			}
 
 			tests, err := discovery.Discover(cfg.TestDir)
 			if err != nil {
 				return &SetupError{Err: fmt.Errorf("discovery: %w", err)}
 			}
 			if len(tests) == 0 {
-				fmt.Println("No tests found.")
+				fmt.Println("No tests found. Run `axiom add` to create your first test.")
 				return nil
 			}
 
@@ -42,19 +45,19 @@ func newValidateCmd() *cobra.Command {
 				// Check 1: glob syntax validity
 				for _, pattern := range t.On {
 					if err := validateGlobSyntax(pattern); err != nil {
-						issues = append(issues, issue{"error", fmt.Sprintf("invalid glob %q: %v", pattern, err)})
+						issues = append(issues, issue{"error", fmt.Sprintf("invalid glob %q: %v — fix the pattern syntax (e.g. 'src/**/*.go')", pattern, err)})
 					}
 				}
 
 				// Check 2: missing on patterns (test can never be cached)
 				if len(t.On) == 0 {
-					issues = append(issues, issue{"warning", "no 'on' globs — test always runs and can never be cached"})
+					issues = append(issues, issue{"warning", "no 'on' globs — test always runs and can never be cached. Add `on: [\"src/**/*.go\"]` to scope it"})
 				}
 
 				// Check 3: empty/vague condition
 				trimmed := strings.TrimSpace(t.Condition)
 				if len(trimmed) < 20 {
-					issues = append(issues, issue{"warning", fmt.Sprintf("condition is very short (%d chars) — may be too vague", len(trimmed))})
+					issues = append(issues, issue{"warning", fmt.Sprintf("condition is very short (%d chars) — be specific about what to verify, e.g. 'all exported functions in pkg/auth have doc comments'", len(trimmed))})
 				}
 
 				testIssues[t.Name] = issues

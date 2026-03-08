@@ -32,7 +32,7 @@ type testDefinition struct {
 
 func Discover(testDir string) ([]Test, error) {
 	if _, err := os.Stat(testDir); os.IsNotExist(err) {
-		return nil, fmt.Errorf("test directory %q not found — run 'axiom init' to create it", testDir)
+		return nil, fmt.Errorf("test directory %q not found — run `axiom init` to create it or set test_dir in axiom.yml", testDir)
 	}
 
 	// Walk the test directory recursively to find all YAML files
@@ -87,15 +87,15 @@ func Discover(testDir string) ([]Test, error) {
 
 			var def testDefinition
 			if err := valNode.Decode(&def); err != nil {
-				return nil, fmt.Errorf("parsing test %q in %s: %w", keyNode.Value, path, err)
+				return nil, fmt.Errorf("parsing test %q in %s (line %d): %w", keyNode.Value, path, keyNode.Line, err)
 			}
 
 			if def.Condition == "" {
-				return nil, fmt.Errorf("test %q in %s: condition is required", keyNode.Value, path)
+				return nil, fmt.Errorf("test %q in %s (line %d): condition is required — add a `condition:` field describing what to verify", keyNode.Value, path, keyNode.Line)
 			}
 
 			if prev, ok := seen[keyNode.Value]; ok {
-				return nil, fmt.Errorf("duplicate test name %q: defined in %s and %s", keyNode.Value, prev, file)
+				return nil, fmt.Errorf("duplicate test name %q: defined in %s and %s — rename one of them", keyNode.Value, prev, file)
 			}
 			seen[keyNode.Value] = file
 

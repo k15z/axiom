@@ -83,7 +83,7 @@ func newShowCmd() *cobra.Command {
 			}
 
 			if filterName != "" && len(entries) == 0 {
-				return fmt.Errorf("no cached reasoning for %q", filterName)
+				return fmt.Errorf("no cached reasoning for %q — run `axiom run %s` first", filterName, filterName)
 			}
 
 			if len(entries) == 0 {
