@@ -33,7 +33,7 @@ func newListCmd() *cobra.Command {
 
 			tests, err := discovery.Discover(cfg.TestDir)
 			if err != nil {
-				return &SetupError{Err: fmt.Errorf("discovery: %w", err)}
+				return &SetupError{Err: fmt.Errorf("failed to load test files: %w", err)}
 			}
 			if len(tests) == 0 {
 				fmt.Println("No tests found. Run `axiom add` to create your first test, or `axiom init` to generate a starter suite.")

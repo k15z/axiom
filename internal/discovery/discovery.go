@@ -70,7 +70,7 @@ func Discover(testDir string) ([]Test, error) {
 
 		var raw yaml.Node
 		if err := yaml.Unmarshal(data, &raw); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", path, err)
+			return nil, fmt.Errorf("invalid YAML in %s: %w — check indentation and syntax", path, err)
 		}
 
 		if raw.Kind != yaml.DocumentNode || len(raw.Content) == 0 {
