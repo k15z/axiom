@@ -1,6 +1,6 @@
 # Roadmap
 
-Revised 2026-03-07 by the full team (Alex, Sam, Priya, Jordan, Morgan).
+Revised 2026-03-08 by the full team (Alex, Sam, Priya, Jordan, Morgan).
 
 This is a strategy document, not a feature backlog. Items are ordered by impact on adoption. If it's not on this list, we're not building it.
 
@@ -18,25 +18,13 @@ We have goreleaser and binary releases. What's missing is the last mile.
 4. **Homebrew formula** -- `brew install axiom`. Goreleaser already has the tap config (`k15z/homebrew-tap`); once the release is tagged, the formula auto-publishes. Getting into homebrew-core comes later with traction.
 5. **README badge** -- `[![tested with axiom](https://img.shields.io/badge/tested%20with-axiom-green)]` -- free viral distribution. Every repo that adds it becomes an ad for axiom. Ship badge snippet in README and docs on day one.
 
-### Performance
-
-Performance is UX. Slow tests mean people stop running them.
-
-6. **Shell out to ripgrep for grep tool** -- When `rg` is available on PATH, use it instead of the Go `filepath.WalkDir` + `bufio.Scanner` implementation. Fall back to Go when `rg` isn't installed (see item 8 for `axiom doctor` detection and "install ripgrep" hint). On repos with 10k+ files, this turns 30-second tests into 5-second tests. The glob tool stays Go-native (it's fast enough and `fd` is less universally installed). Security note: use `exec.Command` with explicit args, never `sh -c` -- the pattern comes from the LLM so there must be no shell injection surface.
-
 ### Feedback Loop
 
 Jordan's point: if failures don't explain themselves well, faster tests and easier install don't matter. Fix the feedback loop before chasing distribution scale.
 
-7. **Token cost display** -- Show cost per test inline: `test_auth_middleware (8.4s, ~$0.02)`. Show run total in summary line: `3 passed, 1 failed, ~$0.08 total`. Always on -- it's one data point, not clutter, and hiding it behind a flag means nobody builds cost intuition. Include in `--quiet` summary too (CI users need budget visibility). Data is already tracked in `types.Usage`; this is wiring it to `internal/output` with per-token pricing lookup.
-8. **`axiom doctor`** -- Checklist-style output: green checkmarks or red X for each check. Core checks: API key present and valid (make a cheap API call, not just env var check), config parseable with no unknown fields, test directory exists with valid YAML, provider connectivity. Nice-to-have checks: `rg` available, cache size/age, version freshness. Key design principle: if a check fails, print the exact command to fix it.
-9. **Error messages as onboarding** -- Systematic pass on every user-facing error in `internal/cli/`. Every error follows the pattern: what happened + what to do + where to learn more. Example: "ANTHROPIC_API_KEY is not set. Set it in your environment or create a .env file. See: https://axiom.dev/docs/getting-started". This is higher-impact than `axiom doctor` -- most users who churn do so at the error message, not the docs.
-10. **Better failure output** -- When a test fails, the one-line summary often isn't enough to act on. Show the specific file and line the agent flagged, not just the conclusion. Make failures copy-pasteable into a PR comment or issue. Also: fix failure output contrast (reasoning currently prints gray via `printReasoning` -- failures should use default/red text, not gray). Show the condition being evaluated alongside the result so users don't have to cross-reference YAML files. These are sub-hour fixes with outsized impact.
-11. **Discovery line numbers in YAML errors** -- When YAML parsing fails, surface the line number instead of just the file path. The `yaml.Node` already has `.Line` available in `discovery.go`. Trivial fix, prevents first-day frustration when new users write malformed YAML.
-
-### Tech Debt
-
-12. **Consolidate config loading** -- `config.go` has 5 loading functions (`Load`, `LoadWithoutKey`, `LoadMinimal`, `ResolveKey`, `loadYAML`) with duplicated YAML unmarshal and defaults logic. Different code paths produce different defaults, which causes "works locally, breaks in CI" bugs. Consolidate into `Load(opts LoadOpts)` with a single defaults path. This also fixes the edge case where `LoadMinimal` silently swallows YAML parse errors while `Load` returns them. Prerequisite for any future config work.
+6. **Token cost display always-on** -- Cost display exists behind `--costs` flag. Make it default-on with `--no-costs` opt-out. Show cost per test inline: `test_auth_middleware (8.4s, ~$0.02)`. Show run total in summary line. Include in `--quiet` summary too (CI users need budget visibility). The pricing lookup and `estimateCost` infrastructure is already in `internal/output/output.go`.
+7. **Error messages as onboarding** -- Systematic pass on every user-facing error in `internal/cli/`. Every error follows the pattern: what happened + what to do + where to learn more. Example: "ANTHROPIC_API_KEY is not set. Set it in your environment or create a .env file. See: https://axiom.dev/docs/getting-started". Most users who churn do so at the error message, not the docs. Config/API key errors are already decent; the rest of `internal/cli/` needs an audit.
+8. **Config shim cleanup** -- Remove deprecated `LoadWithoutKey` and `LoadMinimal` wrappers in `config.go` and migrate their callers (`init.go`, `cache.go`, `validate.go`, `run.go`) to `Load(LoadOpts{})`. The consolidation into `Load(LoadOpts)` is already done; this is the final cleanup of legacy callers.
 
 ### Docs (first-class, not afterthought)
 
@@ -109,6 +97,12 @@ Removed from the roadmap. Not happening unless users specifically request them.
 
 Shipped features -- kept here for reference.
 
+- Ripgrep shelling for grep tool (`toolGrepRg` with `exec.Command`, explicit args, Go fallback)
+- `axiom doctor` (config, API key + connectivity, test directory, rg detection, glob validation)
+- Discovery line numbers in YAML errors (`keyNode.Line` in `discovery.go`)
+- Config loading consolidation (`Load(LoadOpts)` single entry point, `LoadMinimal` error-swallowing fix)
+- Failure output contrast fix (`printFailureReasoning` uses default text, not gray)
+- Condition displayed alongside failure output (`printCondition`)
 - Go unit tests for core packages
 - Per-tool timeouts
 - Flaky test detection & retries (`--retries N`)
