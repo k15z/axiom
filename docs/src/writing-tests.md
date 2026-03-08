@@ -239,9 +239,7 @@ This is useful for:
 
 ## Agent Memory
 
-Axiom's agent builds notes about your codebase across runs, so it skips redundant exploration on subsequent runs. This is automatic -- notes are stored in `.axiom/.cache/notes.json` and invalidated when referenced files change.
-
-See [Agent Memory](./agent-memory.md) for details on how notes work, debugging stale notes, and when to clear.
+The agent builds notes about your codebase across runs to skip redundant exploration. This is automatic. See [Agent Memory](./agent-memory.md) for details.
 
 ## Organizing Tests
 

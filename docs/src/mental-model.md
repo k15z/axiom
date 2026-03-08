@@ -2,7 +2,7 @@
 
 Axiom tests are not unit tests. They're closer to automated code review -- a senior engineer who checks the same invariants on every commit, never forgets, and shows their work.
 
-This page explains the mental model. Read it before writing your first test.
+Understanding this will save you from writing bad tests.
 
 ## Intent, Not Implementation
 
@@ -67,9 +67,9 @@ The `on` globs tell the agent where to start looking and which files drive cache
 
 Narrow `on` patterns make tests faster (better starting hints) and caching more effective (fewer files to hash). But don't overthink it -- the agent is good at exploring.
 
-## Axiom Tests Are Cached Assertions
+## Caching: Pay Once, Skip Until Things Change
 
-Think of each test as a cached assertion about your codebase at a point in time. When the relevant files change, the assertion is re-evaluated. When they don't, the cached result stands.
+Each test result is cached against the content of its trigger files. When those files change, the test re-runs. When they don't, the cached verdict stands.
 
 This means:
 - **First runs are expensive.** The agent explores from scratch. Budget accordingly.

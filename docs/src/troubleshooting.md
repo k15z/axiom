@@ -96,6 +96,10 @@ Axiom automatically retries with exponential backoff (5s, 15s, 30s, 60s). If you
 axiom run -c 2
 ```
 
+### Tests Appear to Hang (OpenAI / Gemini)
+
+Anthropic streams results as the agent works -- you see live progress. OpenAI and Gemini do not stream; results appear after the agent finishes each response. The test is still running. See [Streaming Behavior](./configuration.md#streaming-behavior) for details.
+
 ### Tests Are Slow
 
 - **Use caching:** Don't pass `--all` unless you need it
