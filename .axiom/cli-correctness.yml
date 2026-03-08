@@ -1,0 +1,56 @@
+test_no_direct_os_exit_in_commands:
+  tags: [cli, correctness]
+  on:
+    - internal/cli/**/*.go
+  condition: >
+    Cobra command RunE functions must not call os.Exit() directly. Instead,
+    they should return typed errors (e.g., SetupError or a FailureExitError)
+    and let the root Execute() function handle exit codes. Direct os.Exit()
+    calls bypass deferred cleanup, cobra's error handling, and make commands
+    untestable. The only acceptable os.Exit() call should be in root.go's
+    Execute() function.
+
+test_flag_values_are_validated:
+  tags: [cli, correctness]
+  on:
+    - internal/cli/run.go
+  condition: >
+    Numeric CLI flags like --concurrency and --retries must be validated
+    before use. Negative values should be rejected with a clear error
+    message. Zero is acceptable as a sentinel for "auto" or "disabled".
+    Validation should happen early in the RunE function, before any
+    expensive operations like config loading or test discovery.
+
+test_conflicting_flags_are_detected:
+  tags: [cli, correctness]
+  on:
+    - internal/cli/run.go
+  condition: >
+    Mutually exclusive or conflicting flag combinations must be detected
+    and reported as errors. Specifically, --json and --format should not
+    both be accepted silently — if --json is passed alongside --format
+    with a non-default value, the CLI should error with a message
+    explaining the conflict.
+
+test_test_names_are_validated:
+  tags: [correctness]
+  on:
+    - internal/discovery/discovery.go
+  condition: >
+    Test names parsed from YAML must be validated. Empty strings should be
+    rejected with a clear error. Names containing path separators (/ or \)
+    should be rejected or warned about since they could break cache paths
+    or file-based operations. The validation should happen during discovery,
+    alongside the existing condition-required and duplicate-name checks.
+
+test_glob_patterns_are_semantically_validated:
+  tags: [correctness, security]
+  on:
+    - internal/cli/validate.go
+  condition: >
+    The validate command should warn about glob patterns in "on:" fields
+    that use absolute paths (starting with /) or parent directory traversal
+    (containing ..). These patterns will never match project files and
+    likely indicate a mistake or a security concern. Syntactically valid
+    but semantically wrong patterns should produce warnings, not be
+    silently accepted as [ok].

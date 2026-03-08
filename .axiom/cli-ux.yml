@@ -1,0 +1,44 @@
+test_path_display_uses_filepath_join:
+  tags: [cli, ux]
+  on:
+    - internal/cli/**/*.go
+    - internal/output/**/*.go
+  condition: >
+    When displaying file paths to users, code must use filepath.Join or
+    ensure a path separator exists between directory and filename components.
+    Never concatenate a directory path and a filename with bare string
+    formatting like fmt.Sprintf("%s%s", dir, file) — this breaks when the
+    directory does not end with a trailing slash.
+
+test_no_empty_output_on_zero_matches:
+  tags: [cli, ux]
+  on:
+    - internal/cli/run.go
+    - internal/output/**/*.go
+  condition: >
+    When filtering tests by name, glob pattern, or tag produces zero results,
+    the CLI must print a clear message indicating that no tests matched the
+    filter, rather than silently producing empty output. This applies to both
+    dry-run and actual run modes. Users should never see a blank result with
+    no explanation.
+
+test_idempotent_destructive_commands:
+  tags: [cli, ux]
+  on:
+    - internal/cli/cache.go
+  condition: >
+    Destructive or cleanup commands like "cache clear" must be idempotent.
+    Clearing a cache that does not exist should succeed silently (no-op),
+    not return an error. Check for file existence before attempting removal,
+    or ignore "not found" errors from the filesystem.
+
+test_hint_messages_are_contextual:
+  tags: [cli, ux]
+  on:
+    - internal/cli/root.go
+    - internal/cli/doctor.go
+  condition: >
+    Error hint messages must be contextual. The "Hint: run axiom doctor"
+    message should not appear when the user is already running the doctor
+    command. The root error handler should check which command failed before
+    suggesting diagnostic actions.
