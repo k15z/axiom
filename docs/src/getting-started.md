@@ -1,138 +1,107 @@
 # Getting Started
 
-## Install
+Three commands, two minutes, one working test.
+
+## 1. Install
 
 ```bash
-# One-line install (macOS / Linux)
 curl -fsSL https://raw.githubusercontent.com/k15z/axiom/main/install.sh | sh
-
-# Homebrew
-brew tap k15z/homebrew-tap && brew install axiom
-
-# From source (requires Go 1.25+)
-go install github.com/k15z/axiom/cmd/axiom@latest
 ```
 
-## Set Your API Key
+Also available via [Homebrew](https://brew.sh/) (`brew tap k15z/homebrew-tap && brew install axiom`) or [Go](https://go.dev/) (`go install github.com/k15z/axiom/cmd/axiom@latest`).
 
-Axiom needs an API key from [Anthropic](https://console.anthropic.com/) (default), [OpenAI](https://platform.openai.com/api-keys), or [Google Gemini](https://aistudio.google.com/apikey).
+## 2. Set Your API Key
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-Or create a `.env` file in your project root -- axiom loads it automatically. Environment variables take precedence.
+Get a key from [Anthropic](https://console.anthropic.com/). Axiom also supports [OpenAI](https://platform.openai.com/api-keys) and [Gemini](https://aistudio.google.com/apikey) -- see [Configuration](./configuration.md#multi-provider-support).
 
-## Your First Test
+You can also put the key in a `.env` file in your project root. Axiom loads it automatically.
 
-From your project root, describe what you want to verify:
+## 3. Run Your First Test
+
+From your project root:
 
 ```bash
 axiom add "all API routes require authentication" --run
 ```
 
-Axiom's agent explores your codebase, generates a test, and runs it immediately:
-
-```yaml
-test_api_routes_require_authentication:
-  on:
-    - src/routes/**/*.py
-  condition: >
-    All route handlers that access user data must require authentication.
-    Public endpoints (health checks, login, registration) are exempt.
-```
-
-The `--run` flag skips prompts and runs the test right after generating it. Without `--run`, axiom shows you the generated YAML and asks for confirmation before writing.
-
-A typical test costs $0.01--0.05 with Haiku. Use `axiom run --dry-run` to estimate costs before running.
-
-For inspiration, look at the [example tests](./examples.md) or browse the `.axiom/` directory in axiom's own repo -- those tests are real and demonstrate good patterns.
-
-## Generate Tests Automatically
-
-To generate a batch of tests based on your codebase:
-
-```bash
-axiom init
-```
-
-This creates `.axiom/tests.yml` with generated test definitions and `axiom.yml` with default configuration.
-
-## Validate Your Tests
-
-Before running tests, check them for problems:
-
-```bash
-axiom validate
-```
-
-This catches invalid glob syntax, missing `on` patterns (tests that can never be cached), and vague conditions -- before you spend API calls.
-
-## Run Tests
-
-```bash
-axiom run
-```
-
-Axiom discovers all YAML files in `.axiom/`, checks the cache, and runs any tests whose trigger files have changed. On the first run, all tests execute.
+Axiom generates a test from your description, writes it to `.axiom/tests.yml`, and runs it immediately:
 
 ```
   axiom
 
   .axiom/tests.yml
-    ✓ test_no_sql_injection (8.4s)
-      All database queries use parameterized statements via the ORM
-    ✗ test_auth_middleware (9.2s)
-      Route GET /admin/users bypasses auth -- accesses request.user without verify_token()
-    ○ test_rate_limiting (cached)
+    ✗ test_api_routes_require_authentication (9.2s)
+      Route GET /admin/users in src/routes/admin.py bypasses auth
+      middleware — accesses request.user without verify_token().
 
-  2 passed · 1 failed · 1 cached
+  0 passed · 1 failed
 ```
 
-Run a single test:
+That's it. You have a behavioral test that runs on every commit.
+
+Without `--run`, axiom shows the generated YAML and asks for confirmation before writing. A typical test costs $0.01--0.05 with Haiku.
+
+---
+
+## What's Next
+
+### Write more tests
+
+Describe another property, or write YAML by hand:
 
 ```bash
-axiom run test_auth_middleware
+axiom add "no package imports from the CLI layer"
 ```
-
-Ignore the cache and run everything:
-
-```bash
-axiom run --all
-```
-
-Preview what would run and the estimated cost without calling the API:
-
-```bash
-axiom run --dry-run
-```
-
-## Write Tests by Hand
-
-Create `.axiom/my_tests.yml`:
 
 ```yaml
-test_readme_exists:
+# .axiom/security.yml
+test_no_sql_injection:
+  on:
+    - src/database/**/*.py
   condition: >
-    The project must have a README.md file in the root directory
-    that includes installation instructions and a usage section.
+    All database queries must use parameterized statements or an ORM.
+    No raw string interpolation should construct SQL queries.
 ```
 
-See [Writing Tests](./writing-tests.md) for the full YAML format and tips on writing effective conditions.
+The `on` field tells axiom which files to watch -- when they change, the test re-runs. When they don't, results are cached and skipped. See [Writing Tests](./writing-tests.md) for the full format.
 
-## Watch Mode
-
-Re-run affected tests automatically when source files change:
+### Generate tests from your codebase
 
 ```bash
-axiom run --watch
+axiom init
 ```
 
-Axiom watches files matching your tests' `on` globs and re-runs only the affected tests when changes are detected. Press Ctrl+C to stop.
+Axiom analyzes your project and generates a batch of tests in `.axiom/tests.yml`.
 
-## Next Steps
+### Run and manage tests
 
-- [Writing Tests](./writing-tests.md) -- learn the YAML format and how to write effective conditions
-- [Examples](./examples.md) -- curated test examples across security, architecture, and code quality
-- [Configuration](./configuration.md) -- customize model, providers, timeouts, and caching
-- [CI Integration](./ci-integration.md) -- set up axiom in GitHub Actions
+```bash
+axiom run                        # run tests (skip cached)
+axiom run --all                  # ignore cache, run everything
+axiom run test_auth_middleware   # run a single test
+axiom run --dry-run              # preview what would run + cost estimate
+axiom run --watch                # re-run on file changes
+axiom validate                   # check test YAML for problems
+```
+
+### Add to CI
+
+```yaml
+# .github/workflows/axiom.yml
+- uses: k15z/axiom@v0
+  with:
+    api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+See [CI Integration](./ci-integration.md) for GitHub Actions, GitLab, CircleCI, and Jenkins.
+
+### Go deeper
+
+- [Thinking in Axiom](./mental-model.md) -- when to use behavioral tests and how to write good ones
+- [Examples](./examples.md) -- real tests across Go, Python, TypeScript, Java, and Rust
+- [Configuration](./configuration.md) -- models, providers, timeouts, and caching
+- [CLI Reference](./cli-reference.md) -- every command and flag
