@@ -32,6 +32,7 @@ func Execute() {
 			os.Exit(2)
 		}
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		fmt.Fprintf(os.Stderr, "Hint: run `axiom doctor` to diagnose issues.\n")
 		os.Exit(1)
 	}
 }

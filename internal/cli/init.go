@@ -31,14 +31,14 @@ The LLM explores your code and generates tests that verify architectural
 intent, security invariants, and design constraints.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Load config to respect test_dir from axiom.yml
-			cfg, err := config.LoadMinimal("")
+			cfg, err := config.Load(config.LoadOpts{})
 			if err != nil {
 				return &SetupError{Err: err}
 			}
 			dir := strings.TrimRight(cfg.TestDir, "/")
 
 			if _, err := os.Stat(dir); err == nil {
-				return &SetupError{Err: fmt.Errorf("%s already exists — remove it first to re-initialize", dir)}
+				return &SetupError{Err: fmt.Errorf("%s already exists — run `rm -rf %s` to re-initialize, or use `axiom add` to add tests to the existing directory", dir, dir)}
 			}
 			if model != "" {
 				cfg.Model = model
@@ -74,7 +74,7 @@ intent, security invariants, and design constraints.`,
 			spin.stop()
 
 			if err != nil {
-				return fmt.Errorf("generating tests: %w", err)
+				return fmt.Errorf("failed to generate tests: %w\nCheck your API key and network connection, or run `axiom doctor` to diagnose.", err)
 			}
 
 			// Create .axiom/ and write files

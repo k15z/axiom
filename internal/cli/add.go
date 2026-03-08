@@ -80,7 +80,7 @@ Examples:
 			spin.stop()
 
 			if err != nil {
-				return fmt.Errorf("generating test: %w", err)
+				return fmt.Errorf("failed to generate test: %w\nCheck your API key and network connection, or run `axiom doctor` to diagnose.", err)
 			}
 
 			if err := validateTestYAML(yamlContent); err != nil {
@@ -202,7 +202,7 @@ func extractTestName(yamlContent string) string {
 func runNewTest(cfg config.Config, testName string) error {
 	tests, err := discovery.Discover(cfg.TestDir)
 	if err != nil {
-		return fmt.Errorf("discovery: %w", err)
+		return fmt.Errorf("failed to load test files: %w", err)
 	}
 
 	results, err := runner.Run(context.Background(), cfg, tests, runner.Options{
@@ -213,7 +213,7 @@ func runNewTest(cfg config.Config, testName string) error {
 		return err
 	}
 
-	output.Print(results, cfg.Model, false, cfg.TestDir, false)
+	output.Print(results, cfg.Model, false, cfg.TestDir)
 
 	if output.HasFailures(results) {
 		os.Exit(1)

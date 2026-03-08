@@ -26,7 +26,7 @@ func newListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List all tests and their cached status",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.LoadWithoutKey(dir)
+			cfg, err := config.Load(config.LoadOpts{TestDir: dir})
 			if err != nil {
 				return &SetupError{Err: fmt.Errorf("loading config: %w", err)}
 			}

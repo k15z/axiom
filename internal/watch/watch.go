@@ -45,7 +45,7 @@ func Run(ctx context.Context, cfg config.Config, opts runner.Options) error {
 	if err != nil {
 		return err
 	}
-	output.Print(results, cfg.Model, opts.Verbose, cfg.TestDir, false)
+	output.Print(results, cfg.Model, opts.Verbose, cfg.TestDir)
 
 	// Set up fsnotify watcher
 	watcher, err := fsnotify.NewWatcher()
@@ -178,7 +178,7 @@ func Run(ctx context.Context, cfg config.Config, opts runner.Options) error {
 				}
 				return err
 			}
-			output.Print(results, cfg.Model, opts.Verbose, cfg.TestDir, false)
+			output.Print(results, cfg.Model, opts.Verbose, cfg.TestDir)
 
 			gray.Fprintf(os.Stderr, "\n  Watching for file changes… (Ctrl+C to exit)\n\n")
 		}

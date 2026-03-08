@@ -160,11 +160,11 @@ func TestLoadDotEnv_DoesNotOverwriteExisting(t *testing.T) {
 	}
 }
 
-func TestLoadWithoutKey_NoAxiomYml(t *testing.T) {
+func TestLoad_NoAxiomYml(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	cfg, err := LoadWithoutKey("")
+	cfg, err := Load(LoadOpts{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestLoadWithoutKey_NoAxiomYml(t *testing.T) {
 	}
 }
 
-func TestLoadWithoutKey_PartialAxiomYml(t *testing.T) {
+func TestLoad_PartialAxiomYml(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
@@ -190,7 +190,7 @@ func TestLoadWithoutKey_PartialAxiomYml(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadWithoutKey("")
+	cfg, err := Load(LoadOpts{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -209,20 +209,7 @@ func TestLoadWithoutKey_PartialAxiomYml(t *testing.T) {
 	}
 }
 
-func TestLoadWithoutKey_TestDirOverride(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-
-	cfg, err := LoadWithoutKey("custom-tests/")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.TestDir != "custom-tests/" {
-		t.Errorf("TestDir = %q, want %q", cfg.TestDir, "custom-tests/")
-	}
-}
-
-func TestLoadWithoutKey_InvalidYaml(t *testing.T) {
+func TestLoad_InvalidYaml(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
@@ -230,7 +217,7 @@ func TestLoadWithoutKey_InvalidYaml(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := LoadWithoutKey("")
+	_, err := Load(LoadOpts{})
 	if err == nil {
 		t.Error("expected error for invalid YAML, got nil")
 	}
@@ -324,16 +311,16 @@ func TestResolveKey_MissingAPIKey(t *testing.T) {
 	}
 }
 
-func TestLoadMinimal_NoAPIKeyRequired(t *testing.T) {
+func TestLoad_Minimal_NoAPIKeyRequired(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	// Unset all API keys — LoadMinimal should not error
+	// Unset all API keys — Load without ResolveKey should not error
 	os.Unsetenv("ANTHROPIC_API_KEY")
 	os.Unsetenv("OPENAI_API_KEY")
 	os.Unsetenv("GEMINI_API_KEY")
 
-	cfg, err := LoadMinimal("")
+	cfg, err := Load(LoadOpts{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -343,7 +330,7 @@ func TestLoadMinimal_NoAPIKeyRequired(t *testing.T) {
 	}
 }
 
-func TestLoadMinimal_ReadsAxiomYml(t *testing.T) {
+func TestLoad_Minimal_ReadsAxiomYml(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
@@ -352,7 +339,7 @@ func TestLoadMinimal_ReadsAxiomYml(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadMinimal("")
+	cfg, err := Load(LoadOpts{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -399,7 +386,7 @@ func TestLoadAPIKeyForProvider_UnknownProvider(t *testing.T) {
 	}
 }
 
-func TestLoadWithoutKey_DotEnvIntegration(t *testing.T) {
+func TestLoad_DotEnvIntegration(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
@@ -412,12 +399,12 @@ func TestLoadWithoutKey_DotEnvIntegration(t *testing.T) {
 	// Ensure the env var isn't already set
 	os.Unsetenv("ANTHROPIC_API_KEY")
 
-	cfg, err := LoadWithoutKey("")
+	cfg, err := Load(LoadOpts{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// LoadWithoutKey loads .env but doesn't resolve the key
+	// Load without ResolveKey loads .env but doesn't resolve the key
 	if cfg.APIKey != "" {
 		t.Errorf("APIKey should be empty before ResolveKey, got %q", cfg.APIKey)
 	}
@@ -431,7 +418,7 @@ func TestLoadWithoutKey_DotEnvIntegration(t *testing.T) {
 	}
 }
 
-func TestLoadWithoutKey_CacheEnabledExplicitFalse(t *testing.T) {
+func TestLoad_CacheEnabledExplicitFalse(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
@@ -441,7 +428,7 @@ func TestLoadWithoutKey_CacheEnabledExplicitFalse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadWithoutKey("")
+	cfg, err := Load(LoadOpts{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -450,7 +437,7 @@ func TestLoadWithoutKey_CacheEnabledExplicitFalse(t *testing.T) {
 	}
 }
 
-func TestLoadWithoutKey_EmptyAxiomYml(t *testing.T) {
+func TestLoad_EmptyAxiomYml(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
@@ -458,7 +445,7 @@ func TestLoadWithoutKey_EmptyAxiomYml(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadWithoutKey("")
+	cfg, err := Load(LoadOpts{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -493,7 +480,7 @@ func TestLoadDotEnv_ValueWithEquals(t *testing.T) {
 	}
 }
 
-func TestLoadWithoutKey_FullAxiomYml(t *testing.T) {
+func TestLoad_FullAxiomYml(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
@@ -514,7 +501,7 @@ agent:
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadWithoutKey("")
+	cfg, err := Load(LoadOpts{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -551,7 +538,7 @@ agent:
 	}
 }
 
-func TestLoadMinimal_InvalidYaml(t *testing.T) {
+func TestLoad_Minimal_InvalidYaml(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
@@ -559,9 +546,9 @@ func TestLoadMinimal_InvalidYaml(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// LoadMinimal previously swallowed YAML errors silently. After consolidation,
-	// it should surface them just like LoadWithoutKey does.
-	_, err := LoadMinimal("")
+	// Load previously swallowed YAML errors silently via LoadMinimal. After consolidation,
+	// it should surface them just like Load does.
+	_, err := Load(LoadOpts{})
 	if err == nil {
 		t.Error("expected error for invalid YAML, got nil")
 	}

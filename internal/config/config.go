@@ -77,22 +77,6 @@ func Load(opts LoadOpts) (Config, error) {
 	return cfg, nil
 }
 
-// LoadWithoutKey loads config from axiom.yml and .env but does not resolve the
-// provider or load the API key. Call ResolveKey() after applying CLI flag
-// overrides (e.g. --provider, --model).
-//
-// Deprecated: use Load(LoadOpts{TestDir: dir}) instead.
-func LoadWithoutKey(testDir string) (Config, error) {
-	return Load(LoadOpts{TestDir: testDir})
-}
-
-// LoadMinimal loads config from .env and axiom.yml without requiring an API key.
-// Use this for commands that don't call the API (e.g. validate, list, cache).
-//
-// Deprecated: use Load(LoadOpts{TestDir: dir}) instead.
-func LoadMinimal(testDir string) (Config, error) {
-	return Load(LoadOpts{TestDir: testDir})
-}
 
 // ResolveKey resolves the provider from the model name and loads the
 // appropriate API key from the environment. Call this after applying any
