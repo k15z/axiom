@@ -46,6 +46,7 @@ brews:
   - repository:
       owner: k15z
       name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: "https://github.com/k15z/axiom"
     description: "AI-driven behavioral tests for your codebase"
     license: "MIT"
