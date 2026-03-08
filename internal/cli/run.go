@@ -36,7 +36,6 @@ func newRunCmd() *cobra.Command {
 		watchMode   bool
 		strict      bool
 		quiet       bool
-		costs       bool
 	)
 
 	cmd := &cobra.Command{
@@ -49,7 +48,7 @@ func newRunCmd() *cobra.Command {
 				filter = args[0]
 			}
 
-			cfg, err := config.LoadWithoutKey(dir)
+			cfg, err := config.Load(config.LoadOpts{TestDir: dir})
 			if err != nil {
 				return &SetupError{Err: err}
 			}
@@ -88,7 +87,7 @@ func newRunCmd() *cobra.Command {
 
 			tests, err := discovery.Discover(cfg.TestDir)
 			if err != nil {
-				return &SetupError{Err: fmt.Errorf("discovery: %w", err)}
+				return &SetupError{Err: fmt.Errorf("failed to load test files: %w\nRun `axiom validate` to check your test YAML for issues.", err)}
 			}
 
 			if err := preflightValidate(tests); err != nil {
@@ -155,7 +154,7 @@ func newRunCmd() *cobra.Command {
 				case "github":
 					output.PrintGitHub(results, cfg.Model)
 				default:
-					output.Print(results, cfg.Model, verbose, cfg.TestDir, costs)
+					output.Print(results, cfg.Model, verbose, cfg.TestDir)
 				}
 			} else {
 				passed, failed, cached, skipped, flaky, errored := 0, 0, 0, 0, 0, 0
@@ -207,7 +206,6 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&watchMode, "watch", "w", false, "Watch for file changes and re-run affected tests")
 	cmd.Flags().BoolVar(&strict, "strict", false, "Treat flaky tests (passed on retry) as failures")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress full output, only emit CI summary line to stderr")
-	cmd.Flags().BoolVar(&costs, "costs", false, "Show per-test token counts and cost estimates")
 
 	return cmd
 }

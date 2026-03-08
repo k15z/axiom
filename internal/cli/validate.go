@@ -19,7 +19,7 @@ func newValidateCmd() *cobra.Command {
 		Short: "Lint test YAML files for structural issues",
 		Long:  "Checks glob syntax, warns on missing 'on' patterns (tests that can never cache), and flags short/vague conditions.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.LoadMinimal(dir)
+			cfg, err := config.Load(config.LoadOpts{TestDir: dir})
 			if err != nil {
 				return &SetupError{Err: err}
 			}

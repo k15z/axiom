@@ -18,7 +18,7 @@ var (
 	bold   = color.New(color.Bold)
 )
 
-func Print(results []types.TestResult, model string, verbose bool, testDir string, costs bool) {
+func Print(results []types.TestResult, model string, verbose bool, testDir string) {
 	fmt.Println()
 	bold.Println("  axiom")
 	fmt.Println()
@@ -80,7 +80,7 @@ func Print(results []types.TestResult, model string, verbose bool, testDir strin
 					printFailureReasoning(r.Reasoning, "      ")
 				}
 			}
-			if costs && r.Usage.APICalls > 0 {
+			if r.Usage.APICalls > 0 {
 				cost := estimateCost(model, r.Usage.InputTokens, r.Usage.OutputTokens)
 				gray.Printf("      %d calls · %s in · %s out · ~$%.4f\n",
 					r.Usage.APICalls,
@@ -270,8 +270,10 @@ func printFailureReasoning(reasoning, indent string) {
 	}
 }
 
-// printCondition prints the test condition in gray, indented, so the user can
-// see what was being evaluated alongside the verdict.
+// printCondition prints the test condition in default text color, indented,
+// so the user can see what was being evaluated alongside the verdict.
+// Uses default color (not gray) because the condition is critical context
+// for understanding failures and errors.
 func printCondition(condition, indent string) {
 	if condition == "" {
 		return
@@ -281,7 +283,7 @@ func printCondition(condition, indent string) {
 	if len(collapsed) > 120 {
 		collapsed = collapsed[:117] + "..."
 	}
-	gray.Printf("%scondition: %s\n", indent, collapsed)
+	fmt.Printf("%scondition: %s\n", indent, collapsed)
 }
 
 // estimateCost returns estimated cost in USD based on model pricing.
