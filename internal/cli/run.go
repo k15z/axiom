@@ -90,6 +90,10 @@ func newRunCmd() *cobra.Command {
 				return &SetupError{Err: fmt.Errorf("discovery: %w", err)}
 			}
 
+			if err := preflightValidate(tests); err != nil {
+				return &SetupError{Err: err}
+			}
+
 			if len(tests) == 0 {
 				fmt.Println("No tests found. Run 'axiom init' to create sample tests.")
 				return nil
