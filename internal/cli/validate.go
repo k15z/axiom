@@ -126,3 +126,25 @@ func validateGlobSyntax(pattern string) error {
 	}
 	return nil
 }
+
+// preflightValidate checks discovered tests for errors that would cause
+// runtime failures: invalid glob syntax in 'on:' patterns. It returns a
+// non-nil error listing all problems found so the user can fix them before
+// any LLM API calls are made.
+//
+// Note: missing conditions and duplicate test names are already caught by
+// discovery.Discover(), so they do not need to be rechecked here.
+func preflightValidate(tests []discovery.Test) error {
+	var errs []string
+	for _, t := range tests {
+		for _, pattern := range t.On {
+			if err := validateGlobSyntax(pattern); err != nil {
+				errs = append(errs, fmt.Sprintf("  test %q (in %s): invalid glob %q: %v", t.Name, t.SourceFile, pattern, err))
+			}
+		}
+	}
+	if len(errs) == 0 {
+		return nil
+	}
+	return fmt.Errorf("pre-flight validation failed:\n%s", strings.Join(errs, "\n"))
+}
