@@ -1,8 +1,10 @@
 # Axiom
 
-You refactored the auth module last week. Unit tests passed. But a route handler now bypasses authentication because someone moved the middleware registration. Nobody noticed until it hit production.
+You refactored the auth module last week. The tests passed. The PR got approved. But buried in the diff, a route handler lost its middleware registration -- and now `/admin/users` serves data without checking credentials.
 
-Axiom catches this. Write the invariant once in plain English:
+Nobody catches this until a security review three months later. Or a penetration test. Or worse.
+
+This is the class of bug axiom exists for. You write the invariant once:
 
 ```yaml
 test_all_routes_require_auth:
@@ -14,7 +16,7 @@ test_all_routes_require_auth:
     Public endpoints (health checks, login, registration) are exempt.
 ```
 
-Axiom's agent reads your codebase, explores the relevant files, and tells you whether the property holds -- with specific file paths and line numbers when it doesn't.
+Axiom's agent reads your code, traces the relevant paths, and tells you exactly what broke:
 
 ```
   ✗ test_all_routes_require_auth (9.2s)
@@ -22,26 +24,25 @@ Axiom's agent reads your codebase, explores the relevant files, and tells you wh
     it accesses request.user without calling verify_token().
 ```
 
-This runs on every commit. The agent caches its work, so unchanged code is skipped.
+This runs on every commit. Unchanged code is cached and skipped. A typical test costs $0.01--0.05 with Haiku.
 
-## What Axiom Tests
+## Not Unit Tests -- Behavioral Tests
 
-Unit tests verify that functions return the right output. Axiom tests verify that properties hold across your codebase:
+Unit tests verify that functions return the right output. Axiom tests verify that *properties hold across your codebase* -- the kind of things senior engineers check in code review, when they remember to look:
 
-- **Architectural boundaries** -- "The agent package must not import from the CLI layer"
-- **Security invariants** -- "All file paths must be validated against directory traversal"
-- **Concurrency safety** -- "Concurrent market finalization must use compare-and-swap"
-- **Error handling contracts** -- "Setup errors must produce exit code 2, not exit code 1"
+- "All route handlers require authentication"
+- "No user input reaches SQL queries without parameterization"
+- "The agent package doesn't import from the CLI layer"
+- "Error messages include enough context to diagnose the source"
 
-These properties break silently during refactors. Senior engineers catch them in code review -- when they remember to look. Axiom encodes those checks so they run automatically.
+These properties span multiple files. They break silently during refactors. They can't be expressed as lint rules or unit tests. Axiom encodes them so they run automatically.
 
 ## How It Works
 
-1. You write a test condition in plain English inside a YAML file
-2. Axiom's agent explores your codebase using tools (file reading, grep, glob)
-3. The agent determines whether the condition holds
-4. You get a pass/fail verdict with file paths and line numbers
+You write a test condition in plain English inside a YAML file. Axiom's agent explores your codebase using file reading, grep, and glob tools. It determines whether the condition holds and returns a pass/fail verdict with specific file paths and line numbers. The `on` globs tell the agent where to start and drive cache invalidation -- but the agent can read any file in the repo.
 
-The agent can read any file in your repo. The `on` globs tell it where to start and which files to watch for caching.
+## Get Started
 
-Tests are cached by content hash -- if the files haven't changed since the last passing run, the test is skipped. A typical test costs $0.01--0.05 with Haiku.
+Install axiom and run your first test in under two minutes: [Getting Started](./getting-started.md).
+
+Or read [Thinking in Axiom](./mental-model.md) to understand when and why to use behavioral tests.
