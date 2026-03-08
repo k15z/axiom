@@ -36,6 +36,7 @@ func newRunCmd() *cobra.Command {
 		watchMode   bool
 		strict      bool
 		quiet       bool
+		costs       bool
 	)
 
 	cmd := &cobra.Command{
@@ -95,7 +96,7 @@ func newRunCmd() *cobra.Command {
 			}
 
 			if len(tests) == 0 {
-				fmt.Println("No tests found. Run 'axiom init' to create sample tests.")
+				fmt.Println("No tests found. Run `axiom add` to create your first test, or `axiom init` to generate a starter suite.")
 				return nil
 			}
 
@@ -154,7 +155,7 @@ func newRunCmd() *cobra.Command {
 				case "github":
 					output.PrintGitHub(results, cfg.Model)
 				default:
-					output.Print(results, cfg.Model, verbose, cfg.TestDir)
+					output.Print(results, cfg.Model, verbose, cfg.TestDir, costs)
 				}
 			} else {
 				passed, failed, cached, skipped, flaky, errored := 0, 0, 0, 0, 0, 0
@@ -206,6 +207,7 @@ func newRunCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&watchMode, "watch", "w", false, "Watch for file changes and re-run affected tests")
 	cmd.Flags().BoolVar(&strict, "strict", false, "Treat flaky tests (passed on retry) as failures")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress full output, only emit CI summary line to stderr")
+	cmd.Flags().BoolVar(&costs, "costs", false, "Show per-test token counts and cost estimates")
 
 	return cmd
 }

@@ -31,7 +31,10 @@ The LLM explores your code and generates tests that verify architectural
 intent, security invariants, and design constraints.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Load config to respect test_dir from axiom.yml
-			cfg := config.LoadMinimal("")
+			cfg, err := config.LoadMinimal("")
+			if err != nil {
+				return &SetupError{Err: err}
+			}
 			dir := strings.TrimRight(cfg.TestDir, "/")
 
 			if _, err := os.Stat(dir); err == nil {

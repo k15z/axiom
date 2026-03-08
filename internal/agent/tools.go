@@ -2,19 +2,44 @@ package agent
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/k15z/axiom/internal/glob"
 	"github.com/k15z/axiom/internal/provider"
 )
+
+// rgOnce detects whether ripgrep (rg) is available on PATH.
+// The result is cached after the first check.
+var rgOnce sync.Once
+var rgPath string // empty string means rg is not available
+
+func rgAvailable() bool {
+	rgOnce.Do(func() {
+		p, err := exec.LookPath("rg")
+		if err == nil {
+			rgPath = p
+		}
+	})
+	return rgPath != ""
+}
+
+// RgAvailable reports whether ripgrep was detected on PATH. Exported for use
+// by the `axiom doctor` command.
+func RgAvailable() bool {
+	return rgAvailable()
+}
 
 const maxOutputBytes = 100_000 // truncate tool output beyond this
 
@@ -280,6 +305,96 @@ func toolGrep(ctx context.Context, pattern, globFilter, root string) (string, bo
 		return fmt.Sprintf("invalid glob filter %q: must be a filename pattern, not a path", globFilter), true
 	}
 
+	// Try ripgrep first for performance; fall back to Go implementation.
+	if rgAvailable() {
+		result, isErr, ok := toolGrepRg(ctx, pattern, globFilter, root)
+		if ok {
+			return result, isErr
+		}
+		// rg failed unexpectedly — fall through to Go implementation
+	}
+
+	return toolGrepGo(ctx, pattern, globFilter, root)
+}
+
+// toolGrepRg implements grep by shelling out to ripgrep. Returns (result, isError, ok).
+// ok=false means rg failed in an unexpected way and the caller should fall back to Go.
+func toolGrepRg(ctx context.Context, pattern, globFilter, root string) (string, bool, bool) {
+	// Ensure rgPath is initialized.
+	if !rgAvailable() {
+		return "", false, false
+	}
+
+	rootAbs, err := safePath("", root)
+	if err != nil {
+		return err.Error(), true, true
+	}
+
+	args := []string{
+		"--no-heading",         // output as path:line:content
+		"--line-number",        // include line numbers
+		"--color", "never",     // no ANSI codes
+		"--max-filesize", "1M", // skip very large files
+		"--max-count", "1000",  // cap matches per file to avoid runaway output
+		// rg skips hidden files/directories by default, which matches
+		// the Go fallback behavior. No --hidden flag needed.
+	}
+
+	if globFilter != "" {
+		args = append(args, "--glob", globFilter)
+	}
+
+	args = append(args, "--", pattern, ".")
+
+	cmd := exec.CommandContext(ctx, rgPath, args...)
+	cmd.Dir = rootAbs
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
+
+	// rg exit codes: 0 = matches found, 1 = no matches, 2 = error
+	if err != nil {
+		var exitErr *exec.ExitError
+		if ok := errors.As(err, &exitErr); ok {
+			switch exitErr.ExitCode() {
+			case 1:
+				// No matches — normal
+				return "no matches found", false, true
+			case 2:
+				// rg error (e.g. bad regex syntax). Return the error to the agent
+				// so it can adjust its pattern.
+				errMsg := strings.TrimSpace(stderr.String())
+				if errMsg == "" {
+					errMsg = "grep error"
+				}
+				return errMsg, true, true
+			}
+		}
+		// Context cancellation or unexpected failure — fall back to Go
+		if ctx.Err() != nil {
+			return "", false, false
+		}
+		return "", false, false
+	}
+
+	output := stdout.String()
+	if output == "" {
+		return "no matches found", false, true
+	}
+
+	// rg outputs paths relative to the search dir with "./" prefix; strip it
+	// to match the Go implementation's format (e.g. "main.go:1:..." not "./main.go:1:...").
+	output = strings.TrimPrefix(output, "./")
+	output = strings.ReplaceAll(output, "\n./", "\n")
+
+	return truncate(output), false, true
+}
+
+// toolGrepGo is the pure-Go grep fallback used when ripgrep is not available.
+func toolGrepGo(ctx context.Context, pattern, globFilter, root string) (string, bool) {
 	rootAbs, err := safePath("", root)
 	if err != nil {
 		return err.Error(), true

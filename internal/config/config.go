@@ -31,6 +31,12 @@ type Config struct {
 	APIKey   string      `yaml:"-"`
 }
 
+// LoadOpts controls which steps Load performs.
+type LoadOpts struct {
+	TestDir    string // override test_dir from config; empty = use config value
+	ResolveKey bool   // if true, resolve provider and load API key from environment
+}
+
 func Default() Config {
 	return Config{
 		Model:   "claude-haiku-4-5-20251001",
@@ -48,27 +54,44 @@ func Default() Config {
 	}
 }
 
-func Load(testDir string) (Config, error) {
-	cfg, err := LoadWithoutKey(testDir)
+// Load reads .env and axiom.yml, applies defaults, and optionally resolves the
+// API key. This is the single entry point for all config loading.
+func Load(opts LoadOpts) (Config, error) {
+	loadDotEnv()
+
+	cfg, err := loadYAML()
 	if err != nil {
 		return cfg, err
 	}
-	return cfg, cfg.ResolveKey()
+
+	if opts.TestDir != "" {
+		cfg.TestDir = opts.TestDir
+	}
+
+	if opts.ResolveKey {
+		if err := cfg.ResolveKey(); err != nil {
+			return cfg, err
+		}
+	}
+
+	return cfg, nil
 }
 
 // LoadWithoutKey loads config from axiom.yml and .env but does not resolve the
 // provider or load the API key. Call ResolveKey() after applying CLI flag
 // overrides (e.g. --provider, --model).
+//
+// Deprecated: use Load(LoadOpts{TestDir: dir}) instead.
 func LoadWithoutKey(testDir string) (Config, error) {
-	loadDotEnv()
-	cfg, err := loadYAML()
-	if err != nil {
-		return cfg, err
-	}
-	if testDir != "" {
-		cfg.TestDir = testDir
-	}
-	return cfg, nil
+	return Load(LoadOpts{TestDir: testDir})
+}
+
+// LoadMinimal loads config from .env and axiom.yml without requiring an API key.
+// Use this for commands that don't call the API (e.g. validate, list, cache).
+//
+// Deprecated: use Load(LoadOpts{TestDir: dir}) instead.
+func LoadMinimal(testDir string) (Config, error) {
+	return Load(LoadOpts{TestDir: testDir})
 }
 
 // ResolveKey resolves the provider from the model name and loads the
@@ -89,18 +112,6 @@ func (cfg *Config) ResolveKey() error {
 	return nil
 }
 
-// LoadMinimal loads config from .env and axiom.yml without requiring
-// ANTHROPIC_API_KEY. Use this for commands that don't call the API (e.g.
-// validate, list, cache).
-func LoadMinimal(testDir string) Config {
-	loadDotEnv()
-	cfg, _ := loadYAML()
-	if testDir != "" {
-		cfg.TestDir = testDir
-	}
-	return cfg
-}
-
 // loadYAML reads axiom.yml and applies defaults for zero values.
 func loadYAML() (Config, error) {
 	cfg := Default()
@@ -111,7 +122,7 @@ func loadYAML() (Config, error) {
 	}
 
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return cfg, fmt.Errorf("parsing axiom.yml: %w", err)
+		return cfg, fmt.Errorf("parsing axiom.yml: %w — run `axiom doctor` to diagnose config issues", err)
 	}
 
 	// Re-apply defaults for zero values that weren't explicitly set
@@ -147,20 +158,23 @@ func LoadAPIKeyForProvider(prov string) (string, error) {
 
 // loadAPIKeyForProvider returns the API key for the given provider.
 func loadAPIKeyForProvider(prov string) (string, error) {
-	var envVar string
+	var envVar, signupHint string
 	switch prov {
 	case "anthropic":
 		envVar = "ANTHROPIC_API_KEY"
+		signupHint = "get one at console.anthropic.com/settings/keys"
 	case "openai":
 		envVar = "OPENAI_API_KEY"
+		signupHint = "get one at platform.openai.com/api-keys"
 	case "gemini":
 		envVar = "GEMINI_API_KEY"
+		signupHint = "get one at aistudio.google.com/app/apikey"
 	default:
-		return "", fmt.Errorf("unknown provider %q", prov)
+		return "", fmt.Errorf("unknown provider %q — supported providers: anthropic, openai, gemini", prov)
 	}
 	key := os.Getenv(envVar)
 	if key == "" {
-		return "", fmt.Errorf("%s is not set (set it in the environment or a .env file)", envVar)
+		return "", fmt.Errorf("%s is not set — %s and add it to .env as %s=your-key", envVar, signupHint, envVar)
 	}
 	return key, nil
 }

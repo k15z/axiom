@@ -333,7 +333,10 @@ func TestLoadMinimal_NoAPIKeyRequired(t *testing.T) {
 	os.Unsetenv("OPENAI_API_KEY")
 	os.Unsetenv("GEMINI_API_KEY")
 
-	cfg := LoadMinimal("")
+	cfg, err := LoadMinimal("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	d := Default()
 	if cfg.Model != d.Model {
 		t.Errorf("Model = %q, want default %q", cfg.Model, d.Model)
@@ -349,7 +352,10 @@ func TestLoadMinimal_ReadsAxiomYml(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := LoadMinimal("")
+	cfg, err := LoadMinimal("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if cfg.Model != "gemini-2.0-flash" {
 		t.Errorf("Model = %q, want %q", cfg.Model, "gemini-2.0-flash")
 	}
@@ -542,5 +548,69 @@ agent:
 	}
 	if cfg.Agent.ToolTimeout != 60 {
 		t.Errorf("ToolTimeout = %d, want 60", cfg.Agent.ToolTimeout)
+	}
+}
+
+func TestLoadMinimal_InvalidYaml(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	if err := os.WriteFile("axiom.yml", []byte(":\n  :\n    bad"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// LoadMinimal previously swallowed YAML errors silently. After consolidation,
+	// it should surface them just like LoadWithoutKey does.
+	_, err := LoadMinimal("")
+	if err == nil {
+		t.Error("expected error for invalid YAML, got nil")
+	}
+}
+
+func TestLoad_WithResolveKey(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-load")
+
+	cfg, err := Load(LoadOpts{ResolveKey: true})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Provider != "anthropic" {
+		t.Errorf("Provider = %q, want %q", cfg.Provider, "anthropic")
+	}
+	if cfg.APIKey != "test-key-load" {
+		t.Errorf("APIKey = %q, want %q", cfg.APIKey, "test-key-load")
+	}
+}
+
+func TestLoad_WithoutResolveKey(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	cfg, err := Load(LoadOpts{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.APIKey != "" {
+		t.Errorf("APIKey should be empty without ResolveKey, got %q", cfg.APIKey)
+	}
+	d := Default()
+	if cfg.Model != d.Model {
+		t.Errorf("Model = %q, want default %q", cfg.Model, d.Model)
+	}
+}
+
+func TestLoad_TestDirOverride(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	cfg, err := Load(LoadOpts{TestDir: "custom/"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.TestDir != "custom/" {
+		t.Errorf("TestDir = %q, want %q", cfg.TestDir, "custom/")
 	}
 }
