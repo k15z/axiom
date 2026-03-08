@@ -1,0 +1,7 @@
+{
+  "base_url": "https://api.wayzn.com",
+  "token": "YOUR_AUTH_TOKEN_FROM_CAPTURE",
+  "device_id": "YOUR_DEVICE_ID_FROM_CAPTURE",
+  "timeout": 30000000000,
+  "auth_header": "Authorization"
+}
