@@ -86,6 +86,13 @@ func Run(ctx context.Context, p provider.Provider, model string, condition strin
 	if progress == nil {
 		progress = func(Event) {}
 	}
+
+	// textProgress is the streaming text delta callback for providers that
+	// support incremental output (e.g. Anthropic). It wraps the agent progress
+	// func so live streaming updates appear in the terminal spinner.
+	textProgress := provider.ProgressFunc(func(text string) {
+		progress(Event{Kind: "text", Message: text})
+	})
 	if opts.MaxIterations <= 0 {
 		opts.MaxIterations = 30
 	}
@@ -129,6 +136,7 @@ func Run(ctx context.Context, p provider.Provider, model string, condition strin
 			Messages:  messages,
 			Tools:     tools,
 			MaxTokens: opts.MaxTokens,
+			Progress:  textProgress,
 		})
 		if err != nil {
 			return Result{Usage: usage}, fmt.Errorf("API call failed: %w", err)

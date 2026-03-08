@@ -79,7 +79,7 @@ func errorResponse() (*provider.ChatResponse, error) {
 
 func setupMock(mock *mockRunnerProvider) func() {
 	orig := newProvider
-	newProvider = func(_ config.Config, _ provider.ProgressFunc) provider.Provider {
+	newProvider = func(_ config.Config) provider.Provider {
 		return mock
 	}
 	return func() { newProvider = orig }
@@ -512,7 +512,7 @@ func TestRun_RetryCancelledContext(t *testing.T) {
 
 	// Use a provider that cancels context after the first call
 	origProvider := newProvider
-	newProvider = func(cfg config.Config, progress provider.ProgressFunc) provider.Provider {
+	newProvider = func(cfg config.Config) provider.Provider {
 		return &cancellingProvider{mock: mock, cancel: cancel, callThreshold: 1}
 	}
 	defer func() { newProvider = origProvider }()

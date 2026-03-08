@@ -19,6 +19,7 @@ type ChatParams struct {
 	Messages  []Message
 	Tools     []Tool
 	MaxTokens int
+	Progress  ProgressFunc // optional streaming text callback (Anthropic only)
 }
 
 // Message represents a single conversation turn.

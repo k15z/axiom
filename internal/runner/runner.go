@@ -45,14 +45,12 @@ func MatchesTag(t discovery.Test, tagFilter string) bool {
 }
 
 // newProvider creates the appropriate LLM provider for the given config.
-// The progress callback is used for streaming text deltas (Anthropic only).
 // Declared as a variable so tests can override it with a mock.
-var newProvider = func(cfg config.Config, progress provider.ProgressFunc) provider.Provider {
+var newProvider = func(cfg config.Config) provider.Provider {
 	return provider.FromConfig(provider.ProviderConfig{
 		Provider: cfg.Provider,
 		APIKey:   cfg.APIKey,
 		BaseURL:  cfg.BaseURL,
-		Progress: progress,
 	})
 }
 
@@ -73,6 +71,9 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 	// Load agent notes for context injection
 	noteStore := notes.Load(cfg.Cache.Dir)
 	var notesMu sync.Mutex
+
+	// Create a single shared provider instance for all tests in this run.
+	p := newProvider(cfg)
 
 	concurrency := opts.Concurrency
 	if concurrency <= 0 {
@@ -140,6 +141,7 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 
 		exec := &testExecutor{
 			cfg:       cfg,
+			provider:  p,
 			repoRoot:  repoRoot,
 			noteStore: noteStore,
 			notesMu:   &notesMu,
@@ -242,6 +244,7 @@ func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Op
 // invocation, retries, notes management, and result construction.
 type testExecutor struct {
 	cfg       config.Config
+	provider  provider.Provider
 	repoRoot  string
 	noteStore *notes.Store
 	notesMu   *sync.Mutex
@@ -277,15 +280,6 @@ func (e *testExecutor) execute(ctx context.Context, t discovery.Test, progress a
 		defer timeoutCancel()
 	}
 
-	// Create provider per-test so streaming progress is routed correctly
-	var textProgress provider.ProgressFunc
-	if e.cfg.Provider == "" || e.cfg.Provider == "anthropic" {
-		textProgress = func(text string) {
-			progress(agent.Event{Kind: "text", Message: text})
-		}
-	}
-	p := newProvider(e.cfg, textProgress)
-
 	// Build prior notes context for the agent
 	e.notesMu.Lock()
 	priorNotes := buildPriorNotes(e.noteStore, t.Name, e.repoRoot)
@@ -298,7 +292,7 @@ func (e *testExecutor) execute(ctx context.Context, t discovery.Test, progress a
 		PriorNotes:    priorNotes,
 	}
 
-	result, err := agent.Run(runCtx, p, testModel, t.Condition, t.On, e.repoRoot, progress, agentOpts)
+	result, err := agent.Run(runCtx, e.provider, testModel, t.Condition, t.On, e.repoRoot, progress, agentOpts)
 	duration := time.Since(start)
 
 	tr := types.TestResult{Test: t, Duration: duration}
@@ -333,7 +327,7 @@ func (e *testExecutor) execute(ctx context.Context, t discovery.Test, progress a
 				break
 			}
 			progress(agent.Event{Kind: "thinking", Message: fmt.Sprintf("retrying (%d/%d)…", retry, e.retries)})
-			retryResult, retryErr := agent.Run(runCtx, p, testModel, t.Condition, t.On, e.repoRoot, progress, agentOpts)
+			retryResult, retryErr := agent.Run(runCtx, e.provider, testModel, t.Condition, t.On, e.repoRoot, progress, agentOpts)
 			tr.Duration = time.Since(start)
 			tr.Usage.InputTokens += retryResult.Usage.InputTokens
 			tr.Usage.OutputTokens += retryResult.Usage.OutputTokens

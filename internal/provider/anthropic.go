@@ -13,15 +13,13 @@ import (
 
 // AnthropicProvider calls the Anthropic Messages API with streaming.
 type AnthropicProvider struct {
-	client   anthropic.Client
-	progress ProgressFunc
+	client anthropic.Client
 }
 
 // NewAnthropic creates a provider backed by the Anthropic API.
-func NewAnthropic(apiKey string, progress ProgressFunc) *AnthropicProvider {
+func NewAnthropic(apiKey string) *AnthropicProvider {
 	return &AnthropicProvider{
-		client:   anthropic.NewClient(option.WithAPIKey(apiKey)),
-		progress: progress,
+		client: anthropic.NewClient(option.WithAPIKey(apiKey)),
 	}
 }
 
@@ -77,7 +75,7 @@ func (p *AnthropicProvider) Chat(ctx context.Context, params ChatParams) (*ChatR
 		Messages:  msgs,
 	}
 
-	resp, err := p.streamWithRetry(ctx, apiParams)
+	resp, err := p.streamWithRetry(ctx, apiParams, params.Progress)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +117,7 @@ func (p *AnthropicProvider) Chat(ctx context.Context, params ChatParams) (*ChatR
 }
 
 // consumeStream reads all events from a streaming response.
-func (p *AnthropicProvider) consumeStream(stream *ssestream.Stream[anthropic.MessageStreamEventUnion]) (*anthropic.Message, error) {
+func (p *AnthropicProvider) consumeStream(stream *ssestream.Stream[anthropic.MessageStreamEventUnion], progress ProgressFunc) (*anthropic.Message, error) {
 	defer stream.Close()
 
 	var msg anthropic.Message
@@ -128,10 +126,10 @@ func (p *AnthropicProvider) consumeStream(stream *ssestream.Stream[anthropic.Mes
 		if err := msg.Accumulate(event); err != nil {
 			return nil, fmt.Errorf("stream accumulate: %w", err)
 		}
-		if p.progress != nil {
+		if progress != nil {
 			if delta, ok := event.AsAny().(anthropic.ContentBlockDeltaEvent); ok {
 				if td, ok := delta.Delta.AsAny().(anthropic.TextDelta); ok && td.Text != "" {
-					p.progress(td.Text)
+					progress(td.Text)
 				}
 			}
 		}
@@ -143,10 +141,10 @@ func (p *AnthropicProvider) consumeStream(stream *ssestream.Stream[anthropic.Mes
 }
 
 // streamWithRetry opens a streaming API call with retry on 429 rate limit errors.
-func (p *AnthropicProvider) streamWithRetry(ctx context.Context, params anthropic.MessageNewParams) (*anthropic.Message, error) {
+func (p *AnthropicProvider) streamWithRetry(ctx context.Context, params anthropic.MessageNewParams, progress ProgressFunc) (*anthropic.Message, error) {
 	return WithRetry(ctx, func() (*anthropic.Message, error) {
 		stream := p.client.Messages.NewStreaming(ctx, params)
-		return p.consumeStream(stream)
+		return p.consumeStream(stream, progress)
 	}, func(err error) bool {
 		s := err.Error()
 		return strings.Contains(s, "429") || strings.Contains(s, "rate_limit_error")
