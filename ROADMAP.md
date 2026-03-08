@@ -58,41 +58,58 @@ Shipped features — kept here for reference.
 - **README Quick Start update** — `axiom add` is now the first command shown
 - **Docs cleanup** — removed AI-isms, deduplicated agent memory explanations across pages, added `axiom validate` to CI tips
 - **CI docs PR comment example** — already correct (captures output and exit code in one run)
+- **`testExecutor` extraction** — per-test execution already extracted into a `testExecutor` struct with an `execute()` method; retry and timeout logic is isolated and testable
+- **Structured error types** — `IsRateLimitError` already uses `errors.As()` typed check first; string-match fallback is intentional for Anthropic streaming SDK errors that wrap 429s as strings
+- **Reuse provider across tests** — `Progress` callback moved from provider construction into `ChatParams`; one shared SDK client per run, callback injected per-call by the agent
+- **Auto-validate before running** — `preflightValidate()` checks glob syntax after discovery, before any API calls; exits with code 2 on malformed patterns
 
 ## Next Up
 
-High-priority items that directly impact adoption and reliability.
+High-priority items — two tracks that can run in parallel.
 
-### Distribution & Releases
+### Track 1: Engine Reliability
 
-- **Homebrew formula** — `brew install axiom` for macOS/Linux users.
-- **Curl installer** — `curl -fsSL https://axiom.dev/install.sh | sh` for quick setup.
-- **Semver tagged releases** — proper `v1.x.x` tags with changelogs. The GitHub Action should reference version tags (`@v1`) instead of `@main`.
+Nothing left — all four reliability items are shipped.
+
+### Track 2: Distribution
+
+Blocked on finalizing the project name, domain, and accounts. Revisit once those are decided.
+
+- **Semver tagged releases** — proper `v1.x.x` tags with changelogs. Unblocks Homebrew, curl installer, and `@v1` Action refs.
+- **Curl installer** — one-line install for the "I saw this on HN" user.
+- **Homebrew formula** — `brew install axiom` for the macOS developer who installs tools deliberately.
+- **GitHub Action referencing `@v1`** — `@main` signals instability to CI-focused adopters.
 
 ## Medium-Term
 
-Important improvements that expand axiom's reach and improve the developer experience. Target: 1-3 months.
+Important improvements that expand axiom's reach. Target: 1–3 months.
 
-### Documentation & Adoption
+### Ecosystem Foundation
 
-- **Document streaming behavior per provider** — note that Anthropic shows live streaming progress while OpenAI and Gemini show results after each test completes. Manages expectations, zero code change.
+- **Test registry MVP** (`axiom install security/owasp-top-10`) — the ecosystem moat. Once community test packs exist, no competitor can cold-start against them. Start with a GitHub-backed index and manual curation; build the CLI publish/install workflow. Get to 50 high-quality packs (OWASP, GDPR, React, SQL injection patterns).
 
-### Architecture & Tech Debt
+### Architecture Cleanup
 
-- **Extract TestExecutor from runner** — the 280-line `Run()` function handles cache checks, provider creation, progress routing, notes, retries, and results all in one closure. Extract per-test execution into a testable struct to make retry logic, timeouts, and provider reuse cleaner.
-- **Consolidate config loading** — `config.go` has 5 loading functions (`Load`, `LoadWithoutKey`, `LoadMinimal`, `LoadForDryRun`, `LoadAPIKey`) with duplicated YAML unmarshal + defaults logic. Consolidate into `Load(opts LoadOpts)`.
-- **Reuse provider across tests** — currently creates a new provider (and SDK client) per test to route streaming progress. Should share the client and route progress differently.
-- **Structured error types** — `isRateLimitErr` in runner uses string matching ("429", "rate limit") while the provider layer has proper `rateLimitError` types. Align on typed errors throughout.
+- **Consolidate config loading** — `config.go` has 5 loading functions with duplicated YAML unmarshal + defaults logic. Diverging defaults between loading paths causes subtle CI-vs-local behavioral differences. Consolidate into `Load(opts LoadOpts)`.
+- **Discovery line numbers in errors** — when YAML parsing fails, surface the line number (available from `yaml.Node`) instead of just the file path. Small fix, high impact on first-day experience.
 
-### Test Lifecycle
+### Test Lifecycle & DX
 
-- **Auto-validate before running** — run fast validation checks (glob syntax, missing conditions, duplicate names) before starting expensive agent calls. Saves API costs on malformed tests.
 - **`axiom show` displays model used** — when showing cached reasoning, include which model produced it. Important with per-test model overrides.
-- **Discovery line numbers in errors** — when YAML parsing fails, surface the line number (available from `yaml.Node`) instead of just the file path.
+- **Document streaming behavior per provider** — Anthropic shows live progress; OpenAI and Gemini show results after completion. Zero code change, manages expectations, reduces churn.
+- **Cost dashboard** — track cumulative API spend per test and per run. Users running suites need budget visibility; this is retention, not vanity.
 
 ## Future Vision
 
 Larger features that expand what axiom can do. These are ideas, not commitments.
+
+### Strategic Bets
+
+These three bets compound: a richer registry attracts more users, more users feed the learning backend, and the hosted app removes every remaining barrier to entry. They depend on each other — and on the engine being solid first.
+
+- **Hosted GitHub App** — Removes every setup step (no Go install, no API key, no CI config). Users install the app on their repo and axiom runs automatically on PRs. Creates integration switching costs and becomes the system of record for architectural health over time. Requires hosted backend, GitHub App OAuth, webhook handling, and a multi-tenant runner.
+- **Learning backend + data flywheel** — Aggregate anonymized agent traces across users (tool calls, reasoning steps, pass/fail outcomes). More users = better agent strategies = cheaper/faster runs = more users. Requires opt-in consent, privacy controls, and a backend service. Build after the GitHub App provides the user base and clean trace signal.
+- **Test registry (full)** — Expand the Medium-Term registry MVP into a full public index with namespace ownership, versioning, publisher accounts, and community governance.
 
 - **Custom tool plugins** — let `axiom.yml` define additional tools the agent can use (e.g. run a linter, query a database schema, call an API endpoint)
 - **Test dependencies** — allow tests to declare `depends_on: [other_test]` so they only run after prerequisites pass
@@ -100,6 +117,5 @@ Larger features that expand what axiom can do. These are ideas, not commitments.
 - **Condition quality scoring** — use a fast model to rate test conditions on specificity, measurability, and relevance before running them
 - **Verbose tool tracing** (`axiom run --trace`) — log every tool call, its arguments, output size, and duration to a file for post-mortem debugging
 - **Expected failures (`expect_fail`)** — mark tests as expected to fail (like `@pytest.mark.xfail`). Revisit if users request it; current mental model is "conditions should always hold."
-- **Cost dashboard** — track cumulative API spend over time, per-test cost trends, and cost-per-run history
 - **Config inheritance** — shared base config for monorepos or teams, with per-directory overrides
 - **OpenAI/Gemini streaming** — SSE streaming for live progress updates across all providers. Currently Anthropic-only. Significant effort (SSE parsing, error handling, testing) with limited adoption impact since most users start with Anthropic.
