@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/fatih/color"
@@ -34,7 +35,7 @@ func Print(results []types.TestResult, model string, verbose bool, testDir strin
 	}
 
 	for _, file := range order {
-		gray.Printf("  %s%s\n", testDir, file)
+		gray.Printf("  %s\n", filepath.Join(testDir, file))
 		for _, r := range groups[file] {
 			switch {
 			case r.Cached:
@@ -339,7 +340,7 @@ func formatTokens(n int) string {
 // estimates the maximum token cost without calling the API.
 func PrintDryRun(statuses []types.TestStatus, model string, maxTokensPerTest int, testDir string) {
 	fmt.Println()
-	bold.Println("  axiom --dry-run")
+	bold.Println("  axiom run --dry-run")
 	fmt.Println()
 
 	// Group by source file (same pattern as Print)
@@ -355,7 +356,7 @@ func PrintDryRun(statuses []types.TestStatus, model string, maxTokensPerTest int
 	wouldRun := 0
 	wouldSkip := 0
 	for _, file := range order {
-		gray.Printf("  %s%s\n", testDir, file)
+		gray.Printf("  %s\n", filepath.Join(testDir, file))
 		for _, s := range groups[file] {
 			if strings.HasPrefix(s.Status, "cached-") {
 				gray.Printf("    ○ %s (cached)\n", s.Test.Name)
@@ -391,8 +392,12 @@ func PrintDryRun(statuses []types.TestStatus, model string, maxTokensPerTest int
 		estInput := wouldRun * maxTokensPerTest * 3
 		estOutput := wouldRun * maxTokensPerTest / 2
 		cost := estimateCost(model, estInput, estOutput)
-		gray.Printf("  worst-case cost estimate: ~$%.4f (%s tokens/test × %d tests)\n",
-			cost, formatTokens(maxTokensPerTest*3+maxTokensPerTest/2), wouldRun)
+		testWord := "tests"
+		if wouldRun == 1 {
+			testWord = "test"
+		}
+		gray.Printf("  worst-case cost estimate: ~$%.4f (%s tokens/test × %d %s)\n",
+			cost, formatTokens(maxTokensPerTest*3+maxTokensPerTest/2), wouldRun, testWord)
 	}
 	fmt.Println()
 }
