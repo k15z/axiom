@@ -110,7 +110,7 @@ func newShowCmd() *cobra.Command {
 			for _, e := range entries {
 				if e.File != currentFile {
 					currentFile = e.File
-					gray.Printf("  %s%s\n", cfg.TestDir, currentFile)
+					gray.Printf("  %s\n", filepath.Join(cfg.TestDir, currentFile))
 				}
 
 				var marker string
