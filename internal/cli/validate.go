@@ -42,10 +42,16 @@ func newValidateCmd() *cobra.Command {
 			for _, t := range tests {
 				var issues []issue
 
-				// Check 1: glob syntax validity
+				// Check 1: glob syntax validity and dangerous patterns
 				for _, pattern := range t.On {
 					if err := validateGlobSyntax(pattern); err != nil {
 						issues = append(issues, issue{"error", fmt.Sprintf("invalid glob %q: %v — fix the pattern syntax (e.g. 'src/**/*.go')", pattern, err)})
+					}
+					normalized := filepath.ToSlash(pattern)
+					if strings.HasPrefix(normalized, "/") {
+						issues = append(issues, issue{"warning", fmt.Sprintf("glob pattern %q uses absolute path and will never match project files", pattern)})
+					} else if strings.Contains(normalized, "../") {
+						issues = append(issues, issue{"warning", fmt.Sprintf("glob pattern %q contains '../' and may reference files outside the project", pattern)})
 					}
 				}
 
