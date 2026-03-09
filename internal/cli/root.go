@@ -18,16 +18,6 @@ type SetupError struct {
 func (e *SetupError) Error() string { return e.Err.Error() }
 func (e *SetupError) Unwrap() error { return e.Err }
 
-// RunFailureError is returned by the run command when tests fail or error.
-// It carries the desired exit code so Execute() can exit appropriately
-// without the run command calling os.Exit() directly.
-type RunFailureError struct {
-	ExitCode int
-	Msg      string
-}
-
-func (e *RunFailureError) Error() string { return e.Msg }
-
 // Execute runs the root command and exits with the appropriate code:
 //
 //	0 — success
