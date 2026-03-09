@@ -122,7 +122,9 @@ func newRunCmd() *cobra.Command {
 						statuses[i].Status = "pending"
 					}
 				}
-				output.PrintDryRun(statuses, cfg.Model, cfg.Agent.MaxTokens, cfg.TestDir)
+				if !quiet {
+					output.PrintDryRun(statuses, cfg.Model, cfg.Agent.MaxTokens, cfg.TestDir)
+				}
 				return nil
 			}
 

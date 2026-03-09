@@ -73,7 +73,7 @@ func newValidateCmd() *cobra.Command {
 			for _, t := range tests {
 				if t.SourceFile != currentFile {
 					currentFile = t.SourceFile
-					fmt.Printf("\n  %s%s\n", cfg.TestDir, currentFile)
+					fmt.Printf("\n  %s\n", filepath.Join(cfg.TestDir, currentFile))
 				}
 				issues := testIssues[t.Name]
 				if len(issues) == 0 {
