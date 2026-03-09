@@ -135,7 +135,7 @@ func newShowCmd() *cobra.Command {
 						printDiff(e.PrevReasoning, e.Reasoning, green, red, gray)
 					}
 				} else {
-					for _, line := range strings.Split(strings.TrimSpace(e.Reasoning), "\n") {
+					for line := range strings.SplitSeq(strings.TrimSpace(e.Reasoning), "\n") {
 						gray.Printf("      %s\n", line)
 					}
 				}
