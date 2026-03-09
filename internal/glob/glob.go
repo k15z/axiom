@@ -68,8 +68,11 @@ func HashFiles(patterns []string, root string) map[string]string {
 			return nil
 		}
 		if d.IsDir() {
-			// Skip hidden dirs (e.g. .git, .axiom)
+			// Skip hidden dirs (e.g. .git) except .axiom (test definitions)
 			if strings.HasPrefix(d.Name(), ".") && path != rootAbs {
+				if d.Name() == ".axiom" {
+					return nil // continue into .axiom
+				}
 				return filepath.SkipDir
 			}
 			return nil

@@ -88,10 +88,14 @@ intent, security invariants, and design constraints.`,
 				return fmt.Errorf("writing %s: %w", testsPath, err)
 			}
 
-			// Write axiom.yml with the model used for init
-			sampleCfg := fmt.Sprintf("# axiom configuration\n# See: https://github.com/k15z/axiom\nmodel: %s\n", cfg.Model)
-			if err := os.WriteFile("axiom.yml", []byte(sampleCfg), 0o644); err != nil {
-				return fmt.Errorf("writing axiom.yml: %w", err)
+			// Write axiom.yml with the model used for init (skip if it already exists)
+			if _, err := os.Stat("axiom.yml"); err == nil {
+				fmt.Println("axiom.yml already exists, skipping.")
+			} else {
+				sampleCfg := fmt.Sprintf("# axiom configuration\n# See: https://github.com/k15z/axiom\nmodel: %s\n", cfg.Model)
+				if err := os.WriteFile("axiom.yml", []byte(sampleCfg), 0o644); err != nil {
+					return fmt.Errorf("writing axiom.yml: %w", err)
+				}
 			}
 
 			// Print summary
