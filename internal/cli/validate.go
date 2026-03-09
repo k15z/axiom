@@ -125,7 +125,7 @@ func newValidateCmd() *cobra.Command {
 // filepath.Match, which returns ErrBadPattern for syntax errors like unclosed
 // brackets.
 func validateGlobSyntax(pattern string) error {
-	for _, seg := range strings.Split(filepath.ToSlash(pattern), "/") {
+	for seg := range strings.SplitSeq(filepath.ToSlash(pattern), "/") {
 		if seg == "**" {
 			continue
 		}
