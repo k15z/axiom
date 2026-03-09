@@ -90,6 +90,13 @@ func Discover(testDir string) ([]Test, error) {
 				return nil, fmt.Errorf("parsing test %q in %s (line %d): %w", keyNode.Value, path, keyNode.Line, err)
 			}
 
+			if keyNode.Value == "" {
+				return nil, fmt.Errorf("test in %s (line %d): test name cannot be empty", path, keyNode.Line)
+			}
+			if strings.ContainsAny(keyNode.Value, "/\\") {
+				return nil, fmt.Errorf("test %q in %s (line %d): test name cannot contain path separators", keyNode.Value, path, keyNode.Line)
+			}
+
 			if def.Condition == "" {
 				return nil, fmt.Errorf("test %q in %s (line %d): condition is required — add a `condition:` field describing what to verify", keyNode.Value, path, keyNode.Line)
 			}
