@@ -134,7 +134,11 @@ func (c *Cache) Save() error {
 }
 
 func (c *Cache) Clear() error {
-	return os.Remove(c.filePath())
+	err := os.Remove(c.filePath())
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func (c *Cache) GetEntry(testName string) (Entry, bool) {

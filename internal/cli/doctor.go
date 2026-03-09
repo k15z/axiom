@@ -35,6 +35,7 @@ func newDoctorCmd() *cobra.Command {
 
 			// 1. Config file
 			_, yamlErr := os.ReadFile("axiom.yml")
+			cfg, loadErr := config.Load(config.LoadOpts{TestDir: dir})
 			if yamlErr != nil {
 				if os.IsNotExist(yamlErr) {
 					yellow.Print("    ~ ")
@@ -46,8 +47,6 @@ func newDoctorCmd() *cobra.Command {
 					errors++
 				}
 			} else {
-				// Try parsing it
-				cfg, loadErr := config.Load(config.LoadOpts{TestDir: dir})
 				if loadErr != nil {
 					red.Print("    ✗ ")
 					fmt.Printf("axiom.yml: %s\n", loadErr)
@@ -57,9 +56,10 @@ func newDoctorCmd() *cobra.Command {
 					fmt.Printf("axiom.yml (model: %s)\n", cfg.Model)
 				}
 			}
-
-			// Load config for remaining checks (even if axiom.yml is missing, defaults work)
-			cfg, _ := config.Load(config.LoadOpts{TestDir: dir})
+			if loadErr != nil {
+				fmt.Println()
+				return fmt.Errorf("failed to load config: %w", loadErr)
+			}
 
 			// 2. API key
 			resolveErr := cfg.ResolveKey()

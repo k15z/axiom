@@ -139,9 +139,9 @@ func TestClear(t *testing.T) {
 func TestClear_NoCacheFile(t *testing.T) {
 	dir := t.TempDir()
 	c := New(dir, "")
-	// Clear on a non-existent file should return an error (os.Remove fails)
+	// Clear on a non-existent file should be a no-op (not an error)
 	err := c.Clear()
-	if err == nil {
-		t.Error("expected error when clearing non-existent cache file")
+	if err != nil {
+		t.Errorf("expected no error when clearing non-existent cache file, got: %v", err)
 	}
 }
