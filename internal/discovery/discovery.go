@@ -10,6 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Test is a single behavioral test parsed from a YAML definition file.
 type Test struct {
 	Name          string
 	On            []string
@@ -30,6 +31,8 @@ type testDefinition struct {
 	MaxIterations int      `yaml:"max_iterations"`
 }
 
+// Discover walks testDir recursively and returns all tests defined in YAML files.
+// It validates test names and conditions, returning an error on the first problem found.
 func Discover(testDir string) ([]Test, error) {
 	if _, err := os.Stat(testDir); os.IsNotExist(err) {
 		return nil, fmt.Errorf("test directory %q not found — run `axiom init` to create it or set test_dir in axiom.yml", testDir)

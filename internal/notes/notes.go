@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -46,13 +47,16 @@ func Load(cacheDir string) *Store {
 // Save writes notes to disk.
 func (s *Store) Save(cacheDir string) error {
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		return err
+		return fmt.Errorf("creating notes directory: %w", err)
 	}
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("marshaling notes: %w", err)
 	}
-	return os.WriteFile(filePath(cacheDir), data, 0o644)
+	if err := os.WriteFile(filePath(cacheDir), data, 0o644); err != nil {
+		return fmt.Errorf("writing notes file: %w", err)
+	}
+	return nil
 }
 
 // GetTestNotes returns the notes for a test with staleness info.

@@ -19,6 +19,7 @@ import (
 	"github.com/k15z/axiom/internal/types"
 )
 
+// Options configures a test run.
 type Options struct {
 	All         bool
 	Filter      string
@@ -29,6 +30,8 @@ type Options struct {
 	Retries     int // re-run failed tests up to N times; 0 = no retries
 }
 
+// MatchesTag reports whether test t matches the comma-separated tagFilter.
+// An empty filter matches all tests.
 func MatchesTag(t discovery.Test, tagFilter string) bool {
 	if tagFilter == "" {
 		return true
@@ -54,6 +57,7 @@ var newProvider = func(cfg config.Config) provider.Provider {
 	})
 }
 
+// Run executes the given tests according to opts and returns a result for each one.
 func Run(ctx context.Context, cfg config.Config, tests []discovery.Test, opts Options) ([]types.TestResult, error) {
 	repoRoot, _ := filepath.Abs(".")
 

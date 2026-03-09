@@ -9,11 +9,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// CacheConfig controls result caching behaviour.
 type CacheConfig struct {
 	Enabled bool   `yaml:"enabled"`
 	Dir     string `yaml:"dir"`
 }
 
+// AgentConfig tunes the LLM agent loop parameters.
 type AgentConfig struct {
 	MaxIterations int `yaml:"max_iterations"`
 	MaxTokens     int `yaml:"max_tokens"`
@@ -21,6 +23,7 @@ type AgentConfig struct {
 	ToolTimeout   int `yaml:"tool_timeout"` // per-tool timeout in seconds; 0 means no timeout
 }
 
+// Config is the fully resolved axiom configuration for a single run.
 type Config struct {
 	Model    string      `yaml:"model"`
 	Provider string      `yaml:"provider"` // "anthropic", "openai", "gemini" (inferred from model if omitted)
@@ -37,6 +40,8 @@ type LoadOpts struct {
 	ResolveKey bool   // if true, resolve provider and load API key from environment
 }
 
+// Default returns the baseline configuration used when axiom.yml is absent or
+// when fields are omitted.
 func Default() Config {
 	return Config{
 		Model:   "claude-haiku-4-5-20251001",
@@ -84,13 +89,13 @@ func Load(opts LoadOpts) (Config, error) {
 func (cfg *Config) ResolveKey() error {
 	resolved, err := provider.ResolveProvider(cfg.Provider, cfg.Model)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolving provider: %w", err)
 	}
 	cfg.Provider = resolved
 
 	cfg.APIKey, err = loadAPIKeyForProvider(resolved)
 	if err != nil {
-		return err
+		return fmt.Errorf("loading API key: %w", err)
 	}
 
 	return nil

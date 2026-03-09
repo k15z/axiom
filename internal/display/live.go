@@ -43,6 +43,7 @@ type LiveDisplay struct {
 	completed int // number of tests finished so far
 }
 
+// NewLiveDisplay creates and starts a LiveDisplay for total tests.
 func NewLiveDisplay(total int) *LiveDisplay {
 	d := &LiveDisplay{
 		byName: make(map[string]int),
@@ -56,6 +57,7 @@ func NewLiveDisplay(total int) *LiveDisplay {
 	return d
 }
 
+// StartTest registers a new test as running and renders it to the display.
 func (d *LiveDisplay) StartTest(name string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -65,6 +67,7 @@ func (d *LiveDisplay) StartTest(name string) {
 	d.render()
 }
 
+// Update sets the status message for a running test.
 func (d *LiveDisplay) Update(name, status string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -83,6 +86,7 @@ func isTextDelta(status string) bool {
 	return len(status) >= 4 && status[:4] == "✎ "
 }
 
+// FinishTest marks a test as complete and updates its final state in the display.
 func (d *LiveDisplay) FinishTest(name string, passed, cached, skipped, errored bool, dur time.Duration) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -128,6 +132,7 @@ func (d *LiveDisplay) printCIProgress(name string, passed, cached, skipped, erro
 	fmt.Fprintf(os.Stderr, "  [%d/%d] %s %s %s\n", d.completed, d.total, marker, name, detail)
 }
 
+// Close stops the spinner and renders the final state of all slots.
 func (d *LiveDisplay) Close() {
 	if d.ticker != nil {
 		d.ticker.Stop()

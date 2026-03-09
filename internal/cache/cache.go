@@ -12,6 +12,7 @@ import (
 	"github.com/k15z/axiom/internal/glob"
 )
 
+// Entry is a single cached test result with file hashes for invalidation.
 type Entry struct {
 	LastRun    time.Time         `json:"last_run"`
 	FileHashes map[string]string `json:"file_hashes"`
@@ -22,6 +23,7 @@ type Entry struct {
 	ConfigHash    string            `json:"config_hash,omitempty"`
 }
 
+// Cache stores and retrieves test results keyed by test name and file hashes.
 type Cache struct {
 	dir        string
 	entries    map[string]Entry
@@ -38,6 +40,7 @@ func HashConfig(model string, maxIterations, maxTokens int, extra ...string) str
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+// New creates an empty in-memory cache for the given directory and config hash.
 func New(dir string, configHash string) *Cache {
 	return &Cache{
 		dir:        dir,
@@ -46,6 +49,7 @@ func New(dir string, configHash string) *Cache {
 	}
 }
 
+// Load reads an existing cache from disk, or returns an empty cache if none exists.
 func Load(dir string, configHash string) (*Cache, error) {
 	c := New(dir, configHash)
 	path := c.filePath()
@@ -93,6 +97,7 @@ func (c *Cache) ShouldSkip(testName string, onGlobs []string, repoRoot string) (
 	return true, current
 }
 
+// Update records a test result and its associated file hashes in the cache.
 func (c *Cache) Update(testName string, result string, fileHashes map[string]string, reasoning string) {
 	prevResult := ""
 	prevReasoning := ""
@@ -120,6 +125,7 @@ func (c *Cache) IsFlaky(testName string) bool {
 	return entry.Result != entry.PrevResult
 }
 
+// Save writes the in-memory cache to disk, creating the directory if needed.
 func (c *Cache) Save() error {
 	if err := os.MkdirAll(c.dir, 0o755); err != nil {
 		return fmt.Errorf("creating cache dir: %w", err)
@@ -130,17 +136,22 @@ func (c *Cache) Save() error {
 		return fmt.Errorf("marshaling cache: %w", err)
 	}
 
-	return os.WriteFile(c.filePath(), data, 0o644)
-}
-
-func (c *Cache) Clear() error {
-	err := os.Remove(c.filePath())
-	if err != nil && !os.IsNotExist(err) {
-		return err
+	if err := os.WriteFile(c.filePath(), data, 0o644); err != nil {
+		return fmt.Errorf("writing cache file: %w", err)
 	}
 	return nil
 }
 
+// Clear removes the cache file from disk. No-ops if the file does not exist.
+func (c *Cache) Clear() error {
+	err := os.Remove(c.filePath())
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("removing cache file: %w", err)
+	}
+	return nil
+}
+
+// GetEntry returns the cached entry for testName, if present.
 func (c *Cache) GetEntry(testName string) (Entry, bool) {
 	e, ok := c.entries[testName]
 	return e, ok

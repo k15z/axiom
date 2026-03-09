@@ -130,7 +130,7 @@ func validateGlobSyntax(pattern string) error {
 			continue
 		}
 		if _, err := filepath.Match(seg, ""); err != nil {
-			return err
+			return fmt.Errorf("invalid glob segment %q in pattern %q: %w", seg, pattern, err)
 		}
 	}
 	return nil

@@ -53,6 +53,7 @@ func Execute() {
 	}
 }
 
+// NewRootCmd builds and returns the root cobra command with all subcommands attached.
 func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "axiom",

@@ -6,12 +6,14 @@ import (
 	"github.com/k15z/axiom/internal/discovery"
 )
 
+// Usage tracks token consumption and API call count for a test run.
 type Usage struct {
 	InputTokens  int
 	OutputTokens int
 	APICalls     int
 }
 
+// TestResult holds the outcome of a single test execution.
 type TestResult struct {
 	Test      discovery.Test
 	Passed    bool

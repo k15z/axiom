@@ -43,7 +43,7 @@ func Run(ctx context.Context, cfg config.Config, opts runner.Options) error {
 
 	results, err := runner.Run(ctx, cfg, tests, opts)
 	if err != nil {
-		return err
+		return fmt.Errorf("running initial tests: %w", err)
 	}
 	output.Print(results, cfg.Model, opts.Verbose, cfg.TestDir)
 
@@ -176,7 +176,7 @@ func Run(ctx context.Context, cfg config.Config, opts runner.Options) error {
 					gray.Fprintf(os.Stderr, "  Watch mode stopped.\n\n")
 					return nil
 				}
-				return err
+				return fmt.Errorf("running tests: %w", err)
 			}
 			output.Print(results, cfg.Model, opts.Verbose, cfg.TestDir)
 

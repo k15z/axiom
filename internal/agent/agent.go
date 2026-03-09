@@ -13,12 +13,14 @@ import (
 
 var verdictRe = regexp.MustCompile(`(?i)VERDICT:\s+(PASS|FAIL)`)
 
+// Usage tracks cumulative token and API call consumption across an agent run.
 type Usage struct {
 	InputTokens  int
 	OutputTokens int
 	APICalls     int
 }
 
+// Result is the outcome of a single agent evaluation.
 type Result struct {
 	Passed    bool
 	Reasoning string
@@ -82,6 +84,9 @@ type RunOptions struct {
 	PriorNotes    string        // cached notes from previous runs (injected as context)
 }
 
+// Run executes the agent loop for a single test condition against the repo at repoRoot.
+// It calls the LLM iteratively with tool results until a VERDICT is reached or
+// the iteration limit is hit.
 func Run(ctx context.Context, p provider.Provider, model string, condition string, onGlobs []string, repoRoot string, progress ProgressFunc, opts RunOptions) (Result, error) {
 	if progress == nil {
 		progress = func(Event) {}

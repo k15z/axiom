@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/k15z/axiom/internal/agent"
 	"github.com/k15z/axiom/internal/config"
 	"github.com/k15z/axiom/internal/discovery"
 	"github.com/k15z/axiom/internal/provider"
@@ -139,7 +139,8 @@ func newDoctorCmd() *cobra.Command {
 			}
 
 			// 4. ripgrep (optional)
-			if agent.RgAvailable() {
+			_, rgErr := exec.LookPath("rg")
+			if rgErr == nil {
 				green.Print("    ✓ ")
 				fmt.Println("ripgrep (rg) installed")
 			} else {

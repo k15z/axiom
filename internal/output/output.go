@@ -19,6 +19,7 @@ var (
 	bold   = color.New(color.Bold)
 )
 
+// Print renders test results to stdout in human-readable terminal format.
 func Print(results []types.TestResult, model string, verbose bool, testDir string) {
 	fmt.Println()
 	bold.Println("  axiom")
@@ -200,6 +201,7 @@ func CISummary(passed, failed, errored, cached, skipped, flaky int) string {
 	return strings.Join(parts, ", ")
 }
 
+// PrintJSON serialises test results to stdout as a JSON object.
 func PrintJSON(results []types.TestResult, model string) error {
 	type jsonUsage struct {
 		InputTokens  int     `json:"input_tokens"`

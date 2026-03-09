@@ -182,7 +182,7 @@ func newRunCmd() *cobra.Command {
 				Retries:     retries,
 			})
 			if err != nil {
-				return err
+				return fmt.Errorf("running tests: %w", err)
 			}
 
 			// --json is shorthand for --format json
@@ -195,7 +195,7 @@ func newRunCmd() *cobra.Command {
 				switch outputFormat {
 				case "json":
 					if err := output.PrintJSON(results, cfg.Model); err != nil {
-						return err
+						return fmt.Errorf("writing JSON output: %w", err)
 					}
 				case "github":
 					output.PrintGitHub(results, cfg.Model)
