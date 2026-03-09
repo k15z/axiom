@@ -180,6 +180,7 @@ func loadDotEnv() {
 			continue
 		}
 		key = strings.TrimSpace(key)
+		key = strings.TrimPrefix(key, "export ")
 		val = strings.TrimSpace(val)
 		if len(val) >= 2 {
 			if (val[0] == '"' && val[len(val)-1] == '"') ||

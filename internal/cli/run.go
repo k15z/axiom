@@ -48,6 +48,17 @@ func newRunCmd() *cobra.Command {
 				filter = args[0]
 			}
 
+			if concurrency < 0 {
+				return fmt.Errorf("--concurrency must be non-negative, got %d", concurrency)
+			}
+			if retries < 0 {
+				return fmt.Errorf("--retries must be non-negative, got %d", retries)
+			}
+
+			if jsonOut && cmd.Flags().Changed("format") {
+				return fmt.Errorf("cannot use --json with --format; they are mutually exclusive")
+			}
+
 			cfg, err := config.Load(config.LoadOpts{TestDir: dir})
 			if err != nil {
 				return &SetupError{Err: err}
@@ -117,6 +128,14 @@ func newRunCmd() *cobra.Command {
 					}
 					statuses = filtered
 				}
+				if len(statuses) == 0 {
+					if filter != "" {
+						fmt.Fprintf(os.Stderr, "No tests matched filter %q.\n", filter)
+					} else if tag != "" {
+						fmt.Fprintf(os.Stderr, "No tests matched tag %q.\n", tag)
+					}
+					return nil
+				}
 				if all {
 					for i := range statuses {
 						statuses[i].Status = "pending"
@@ -126,6 +145,31 @@ func newRunCmd() *cobra.Command {
 					output.PrintDryRun(statuses, cfg.Model, cfg.Agent.MaxTokens, cfg.TestDir)
 				}
 				return nil
+			}
+
+			// Check if any tests match the filter/tag before running
+			if filter != "" || tag != "" {
+				matched := false
+				for _, t := range tests {
+					if filter != "" {
+						if m, _ := filepath.Match(filter, t.Name); !m {
+							continue
+						}
+					}
+					if !runner.MatchesTag(t, tag) {
+						continue
+					}
+					matched = true
+					break
+				}
+				if !matched {
+					if filter != "" {
+						fmt.Fprintf(os.Stderr, "No tests matched filter %q.\n", filter)
+					} else {
+						fmt.Fprintf(os.Stderr, "No tests matched tag %q.\n", tag)
+					}
+					return nil
+				}
 			}
 
 			results, err := runner.Run(context.Background(), cfg, tests, runner.Options{
@@ -180,13 +224,13 @@ func newRunCmd() *cobra.Command {
 			}
 
 			if output.HasFailures(results) {
-				os.Exit(1)
+				return &RunFailureError{ExitCode: 1, Msg: "some tests failed"}
 			}
 			if strict && output.HasFlaky(results) {
-				os.Exit(1)
+				return &RunFailureError{ExitCode: 1, Msg: "some tests were flaky (strict mode)"}
 			}
 			if output.HasErrors(results) {
-				os.Exit(2)
+				return &RunFailureError{ExitCode: 2, Msg: "some tests errored"}
 			}
 			return nil
 		},

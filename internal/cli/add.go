@@ -216,7 +216,7 @@ func runNewTest(cfg config.Config, testName string) error {
 	output.Print(results, cfg.Model, false, cfg.TestDir)
 
 	if output.HasFailures(results) {
-		os.Exit(1)
+		return &RunFailureError{ExitCode: 1, Msg: "new test failed"}
 	}
 	return nil
 }
